@@ -2,14 +2,11 @@ FROM python:3.10-slim-buster
 
 WORKDIR /app
 
-COPY ./requirements.txt .
-COPY ./setup.py .
-
+COPY ./setup.py ./.env /app/
 RUN python -m pip install -e .
 
 COPY ./cytubebot ./cytubebot
-
-COPY ./.env .
+ADD https://github.com/dwyl/english-words/raw/master/words.txt /app/cytubebot/randomvideo/eng_dict.txt
 
 ENV PYTHONUNBUFFERED=1
 

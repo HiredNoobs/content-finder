@@ -1,4 +1,6 @@
 import requests
+from collections import namedtuple
+from operator import attrgetter
 from datetime import datetime
 from bs4 import BeautifulSoup as bs
 from cytubebot.contentfinder.database import DBHandler
@@ -8,7 +10,7 @@ class ContentFinder:
     def __init__(self) -> None:
         self.db = DBHandler()
 
-    def find_content(self) -> tuple[dict, int]:
+    def find_content(self) -> tuple[list, int]:
         """
         returns:
             A tuple containing the content dict and a count of the amount of
@@ -18,8 +20,9 @@ class ContentFinder:
             }
         """
         con, cur = self.db.init_db()
-        content = {}
-        count = 0
+        ContentDetails = namedtuple('ContentDetails',
+                                    'channel_id datetime video_id')
+        content = []
 
         cur.execute('SELECT * FROM content')
         for row in cur:
@@ -34,8 +37,6 @@ class ContentFinder:
             page = resp.text
             soup = bs(page, 'lxml')
 
-            video_ids = []
-            new_dt = None
             for item in soup.find_all('entry'):
                 if '#shorts' in item.find_all('title')[0].text.casefold():
                     print('Skipping #short.')
@@ -50,17 +51,12 @@ class ContentFinder:
 
                 video_id = item.find_all('yt:videoid')[0].text
 
-                # Insert in reverse order so vids are in the order they were
-                video_ids.insert(0, video_id)
-
-                # Set new datetime for DB
-                if not new_dt:
-                    new_dt = published
-
-            count += len(video_ids)
-            content[channel_id] = (new_dt, video_ids)
+                c = ContentDetails(channel_id, published, video_id)
+                content.append(c)
 
         cur.close()
         con.close()
 
-        return content, count
+        content = sorted(content, key=attrgetter('datetime'))
+
+        return content, len(content)

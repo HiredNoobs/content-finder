@@ -1,7 +1,6 @@
 import string
 import random
 import requests
-import re
 import json
 
 
@@ -9,11 +8,19 @@ class RandomFinder:
     def __init__(self) -> None:
         pass
 
-    def find_random(self, size: int) -> str:
+    def find_random(self, size: int=3, use_dict=False) -> str:
         if 0 > size > 10:
             size = 3
 
-        rand_str = self._rand_str(size)
+        if use_dict:
+            # This file is downloaded by the Dockerfile
+            with open('/app/cytubebot/randomvideo/eng_dict.txt') as file:
+                lines = file.read().splitlines()
+                rand_str = random.choice(lines)
+        else:
+            rand_str = self._rand_str(size)
+        
+        print(f'Finding random with {rand_str}')
         url = f'https://www.youtube.com/results?search_query={rand_str}'
         resp = requests.get(url)
 
@@ -30,7 +37,7 @@ class RandomFinder:
         except ValueError:
             return None
 
-        return vids[rand_num]['videoRenderer']['videoId']
+        return vids[rand_num]['videoRenderer']['videoId'], rand_str
 
     def _rand_str(self, size: int) -> str:
         """
