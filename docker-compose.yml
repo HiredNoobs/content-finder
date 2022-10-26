@@ -4,6 +4,11 @@ services:
   content-finder:
     container_name: content-finder
     build: .
+    environment:
+      - CYTUBE_URL=https://cytu.be/
+      - CYTUBE_URL_CHANNEL_NAME=CHANNEL_NAME
+      - CYTUBE_USERNAME=USERNAME
+      - CYTUBE_PASSWORD=PASSWORD
     volumes:
       - ./content.db:/app/content.db
       - ./channel-ids.txt:/app/channel-ids.txt
