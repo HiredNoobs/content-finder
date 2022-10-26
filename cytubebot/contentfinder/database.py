@@ -1,23 +1,14 @@
 import sqlite3
 import os
 import requests
-import configparser
 from bs4 import BeautifulSoup as bs
-from cytubebot.common.exceptions import MissingConfVar
 
 
 class DBHandler:
     def __init__(self) -> None:
         self.last_updated = None
 
-        # Doing here to avoid having to frequently read from .ini
-        config = configparser.ConfigParser()
-        conf_file = f'{os.path.dirname(os.path.realpath(__file__))}/conf.ini'
-        config.read(conf_file)
-        self.db_file = config.get('DEFAULT', 'DB_FILE')
-
-        if not self.db_file:
-            raise MissingConfVar(f'Missing var "DB_FILE" from {conf_file}')
+        self.db_file = '/app/content.db'
 
     def init_db(self) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
         """
