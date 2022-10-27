@@ -309,7 +309,8 @@ class ChatBot:
                     channel = channel_name
 
                 resp = requests.get(channel, cookies={'CONSENT': 'YES+1'})
-                soup = bs(resp.text, 'lxml')
+                page = resp.text
+                soup = bs(page, 'lxml')
                 yt_initial_data = soup.find(
                     'script', string=re.compile('ytInitialData')
                 )
@@ -364,6 +365,10 @@ class ChatBot:
                 self.lock = True
                 if self.blackjack_bot:
                     self.blackjack_bot.kill = True
+
+                # Kill the DB container
+                requests.get('http://postgres.content-finder:5000')
+
                 self.sio.emit('chatMsg', {'msg': 'Bye bye!'})
                 self.sio.sleep(3)  # temp sol to allow the chat msg to send
                 self.sio.disconnect()

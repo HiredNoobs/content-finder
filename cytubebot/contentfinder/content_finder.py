@@ -24,46 +24,6 @@ class ContentFinder:
                 'channel_id': (datetime, [video_id_1, video_id_2])
             }
         """
-        # con, cur = self._db.init_db()
-        # ContentDetails = namedtuple('ContentDetails', 'channel_id datetime video_id')
-        # content = []
-
-        # cur.execute('SELECT * FROM content')
-        # for row in cur:
-        #     channel_id = row[0]
-        #     name = row[1]
-        #     dt = datetime.fromisoformat(row[2])
-        #     self._logger.info(f'Getting content for: {name}')
-
-        #     channel = (
-        #         'https://www.youtube.com/feeds/videos.xml?channel_id=' f'{channel_id}'
-        #     )
-        #     resp = requests.get(channel)
-        #     page = resp.text
-        #     soup = bs(page, 'lxml')
-
-        #     for item in soup.find_all('entry'):
-        #         if '#shorts' in item.find_all('title')[0].text.casefold():
-        #             self._logger.info('Skipping #short.')
-        #             continue
-
-        #         published = item.find_all('published')[0].text
-        #         published = datetime.fromisoformat(published)
-
-        #         if published < dt or published == dt:
-        #             self._logger.info(f'No more new videos for {name}')
-        #             break
-
-        #         video_id = item.find_all('yt:videoid')[0].text
-
-        #         c = ContentDetails(channel_id, published, video_id)
-        #         content.append(c)
-
-        # cur.close()
-        # con.close()
-
-        # content = sorted(content, key=attrgetter('datetime'))
-
         ContentDetails = namedtuple('ContentDetails', 'channel_id datetime video_id')
 
         content = []

@@ -11,9 +11,6 @@ from psycopg_pool import ConnectionPool
 class DBHandler:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
-        # self.last_updated = None
-
-        self.db_file = '/app/content.db'
 
         conn_info = (
             'postgres://'
@@ -35,15 +32,15 @@ class DBHandler:
         """
         self._logger.info(f'Executing {query} with {params}.')
         query_type = query.split()[0]
-        results = None
+        result = None
         with self._pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
                 self._logger.info(cur.statusmessage)
                 if query_type == 'SELECT':
-                    results = cur.fetchall()
+                    result = cur.fetchall()
             conn.commit()
-        return results
+        return result
 
     def _close_pool(self) -> None:
         self._logger.info('Closing Postgres connnection pool.')
@@ -65,7 +62,7 @@ class DBHandler:
         self._execute(query, (channel_id, channel_name, published))
 
     def remove_channel(self, channel_name) -> None:
-        query = 'DELETE FROM content WHERE name = %s LIMIT 1'
+        query = 'DELETE FROM content WHERE ctid IN (SELECT ctid FROM content WHERE name = %s LIMIT 1)'
         self._execute(query, (channel_name,))
 
     @property

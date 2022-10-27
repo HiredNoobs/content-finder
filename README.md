@@ -6,8 +6,9 @@
 ## Overview
 A simple chat bot for Cytube, goes through channels added to `channel-ids.txt` and adds new videos to cytube.
 
-Start with: `docker-compose up --abort-on-container-exit` or `docker-compose up -d`
-If you start with `-d`, running !kill in chat will not kill the DB container - you will need to manually handle this, but !kill is still recommended.
+For Docker you must run: `docker volume create postgres_db` (or if on Linux change the docker-compose file to point to a directory on your host machine.)
+
+Start with: `docker-compose up -d`
 ## Requirements
 - Docker & docker-compose - I've tightly coupled development with Docker in mind, if you want to run without you will need to fix a few things yourself for now (keep in mind you will **need** Python >= 3.10 and a postgres DB )
 ## Setup
