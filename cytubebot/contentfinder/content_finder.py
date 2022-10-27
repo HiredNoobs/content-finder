@@ -1,16 +1,21 @@
-import requests
+import logging
 from collections import namedtuple
-from operator import attrgetter
 from datetime import datetime
+from operator import attrgetter
+
+import requests
 from bs4 import BeautifulSoup as bs
+
 from cytubebot.contentfinder.database import DBHandler
 
 
 class ContentFinder:
     def __init__(self) -> None:
-        self.db = DBHandler()
+        self._logger = logging.getLogger(__name__)
+        self._db = DBHandler()
+        # self._db.init_db()
 
-    def find_content(self) -> tuple[list, int]:
+    def find_content(self) -> list[namedtuple]:
         """
         returns:
             A tuple containing the content dict and a count of the amount of
@@ -19,43 +24,82 @@ class ContentFinder:
                 'channel_id': (datetime, [video_id_1, video_id_2])
             }
         """
-        con, cur = self.db.init_db()
-        ContentDetails = namedtuple('ContentDetails',
-                                    'channel_id datetime video_id')
+        # con, cur = self._db.init_db()
+        # ContentDetails = namedtuple('ContentDetails', 'channel_id datetime video_id')
+        # content = []
+
+        # cur.execute('SELECT * FROM content')
+        # for row in cur:
+        #     channel_id = row[0]
+        #     name = row[1]
+        #     dt = datetime.fromisoformat(row[2])
+        #     self._logger.info(f'Getting content for: {name}')
+
+        #     channel = (
+        #         'https://www.youtube.com/feeds/videos.xml?channel_id=' f'{channel_id}'
+        #     )
+        #     resp = requests.get(channel)
+        #     page = resp.text
+        #     soup = bs(page, 'lxml')
+
+        #     for item in soup.find_all('entry'):
+        #         if '#shorts' in item.find_all('title')[0].text.casefold():
+        #             self._logger.info('Skipping #short.')
+        #             continue
+
+        #         published = item.find_all('published')[0].text
+        #         published = datetime.fromisoformat(published)
+
+        #         if published < dt or published == dt:
+        #             self._logger.info(f'No more new videos for {name}')
+        #             break
+
+        #         video_id = item.find_all('yt:videoid')[0].text
+
+        #         c = ContentDetails(channel_id, published, video_id)
+        #         content.append(c)
+
+        # cur.close()
+        # con.close()
+
+        # content = sorted(content, key=attrgetter('datetime'))
+
+        ContentDetails = namedtuple('ContentDetails', 'channel_id datetime video_id')
+
         content = []
+        with self._db.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT * FROM content')
+                for row in cur:
+                    channel_id = row[0]
+                    name = row[1]
+                    dt = datetime.fromisoformat(row[2])
+                    self._logger.info(f'Getting content for: {name}')
 
-        cur.execute('SELECT * FROM content')
-        for row in cur:
-            channel_id = row[0]
-            name = row[1]
-            dt = datetime.fromisoformat(row[2])
-            print(f'Getting content for: {name}')
+                    channel = (
+                        'https://www.youtube.com/feeds/videos.xml?channel_id='
+                        f'{channel_id}'
+                    )
+                    resp = requests.get(channel)
+                    page = resp.text
+                    soup = bs(page, 'lxml')
 
-            channel = ('https://www.youtube.com/feeds/videos.xml?channel_id='
-                       f'{channel_id}')
-            resp = requests.get(channel)
-            page = resp.text
-            soup = bs(page, 'lxml')
+                    for item in soup.find_all('entry'):
+                        if '#shorts' in item.find_all('title')[0].text.casefold():
+                            self._logger.info('Skipping #short.')
+                            continue
 
-            for item in soup.find_all('entry'):
-                if '#shorts' in item.find_all('title')[0].text.casefold():
-                    print('Skipping #short.')
-                    continue
+                        published = item.find_all('published')[0].text
+                        published = datetime.fromisoformat(published)
 
-                published = item.find_all('published')[0].text
-                published = datetime.fromisoformat(published)
+                        if published < dt or published == dt:
+                            self._logger.info(f'No more new videos for {name}')
+                            break
 
-                if published < dt or published == dt:
-                    print(f'No more new videos for {name}')
-                    break
+                        video_id = item.find_all('yt:videoid')[0].text
 
-                video_id = item.find_all('yt:videoid')[0].text
-
-                c = ContentDetails(channel_id, published, video_id)
-                content.append(c)
-
-        cur.close()
-        con.close()
+                        c = ContentDetails(channel_id, published, video_id)
+                        content.append(c)
 
         content = sorted(content, key=attrgetter('datetime'))
 

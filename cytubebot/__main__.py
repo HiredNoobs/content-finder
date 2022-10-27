@@ -1,4 +1,5 @@
 import os
+
 from cytubebot.chatbot.chat_bot import ChatBot
 from cytubebot.common.exceptions import MissingEnvVar
 

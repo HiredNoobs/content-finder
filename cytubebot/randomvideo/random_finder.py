@@ -1,14 +1,16 @@
-import string
-import random
-import requests
 import json
+import logging
+import random
+import string
+
+import requests
 
 
 class RandomFinder:
     def __init__(self) -> None:
-        pass
+        self._logger = logging.getLogger(__name__)
 
-    def find_random(self, size: int=3, use_dict=False) -> str:
+    def find_random(self, size: int = 3, use_dict=False) -> str:
         if 0 > size > 10:
             size = 3
 
@@ -19,8 +21,8 @@ class RandomFinder:
                 rand_str = random.choice(lines)
         else:
             rand_str = self._rand_str(size)
-        
-        print(f'Finding random with {rand_str}')
+
+        self._logger.info(f'Finding random with {rand_str}')
         url = f'https://www.youtube.com/results?search_query={rand_str}'
         resp = requests.get(url)
 
@@ -29,7 +31,9 @@ class RandomFinder:
         start = 'ytInitialData = '
         end = ';</script>'
         vids = json.loads(resp.text.split(start)[1].split(end)[0])
-        vids = vids['contents']['twoColumnSearchResultsRenderer']['primaryContents']['sectionListRenderer']['contents'][0]['itemSectionRenderer']['contents']
+        vids = vids['contents']['twoColumnSearchResultsRenderer']['primaryContents'][
+            'sectionListRenderer'
+        ]['contents'][0]['itemSectionRenderer']['contents']
         vids = [x for x in vids if 'videoRenderer' in x]
 
         try:

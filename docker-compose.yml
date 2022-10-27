@@ -1,14 +1,38 @@
-version: '3.5'
+version: '3.8'
 
 services:
+  postgres.content-finder:
+    container_name: postgres.content-finder
+    build: ./postgres
+    user: root
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: content
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d content -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_db:/var/lib/postgresql/data:rw
+      - ./postgres/backups/:/backups/:rw
   content-finder:
     container_name: content-finder
     build: .
     environment:
-      - CYTUBE_URL=https://cytu.be/
-      - CYTUBE_URL_CHANNEL_NAME=CHANNEL_NAME
-      - CYTUBE_USERNAME=USERNAME
-      - CYTUBE_PASSWORD=PASSWORD
-    volumes:
-      - ./content.db:/app/content.db
-      - ./channel-ids.txt:/app/channel-ids.txt
+      PYTHONUNBUFFERED: 1
+      CYTUBE_URL: https://cytu.be/
+      CYTUBE_URL_CHANNEL_NAME: channel
+      CYTUBE_USERNAME: username
+      CYTUBE_PASSWORD: pass
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: pass
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres.content-finder:
+        condition: service_healthy
+
+volumes:
+  postgres_db:
+    external: true

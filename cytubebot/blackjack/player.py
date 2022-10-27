@@ -1,4 +1,4 @@
-from cytubebot.blackjack.common import get_ascii_art, get_hidden_ascii_art
+from cytubebot.blackjack.common import get_ascii_art
 
 
 class Player:
@@ -21,7 +21,9 @@ class Player:
         return len(self.hand) == 2 and self.hand[0].value == self.hand[1].value
 
     def check_blackjack(self) -> bool:
-        values = [x.value if x.value < 10 else 10 if x.value != 1 else 11 for x in self.hand]
+        values = [
+            x.value if x.value < 10 else 10 if x.value != 1 else 11 for x in self.hand
+        ]
         if sum(values) == 21:
             return True
         while 11 in values:
@@ -29,11 +31,13 @@ class Player:
             values[keys[0]] = 1
             if sum(values) == 21:
                 return True
-        
+
         return False
 
     def check_bust(self) -> bool:
-        values = [x.value if x.value < 10 else 10 if x.value != 1 else 11 for x in self.hand]
+        values = [
+            x.value if x.value < 10 else 10 if x.value != 1 else 11 for x in self.hand
+        ]
         if sum(values) > 21:
             return True
         while 11 in values:
@@ -41,7 +45,7 @@ class Player:
             values[keys[0]] = 1
             if sum(values) == 21:
                 return True
-        
+
         return False
 
     def set_result(self) -> None:
@@ -52,14 +56,17 @@ class Player:
         else:
             possible_results = []
             # If not blackjack or bust then find the best result
-            values = [x.value if x.value < 10 else 10 if x.value != 1 else 11 for x in self.hand]
+            values = [
+                x.value if x.value < 10 else 10 if x.value != 1 else 11
+                for x in self.hand
+            ]
             possible_results.append(sum(values))
 
             while 11 in values:
                 keys = [key for key, val in enumerate(values) if val == 11]
                 values[keys[0]] = 1
                 possible_results.append(sum(values))
-            
+
             # Remove all busts
             possible_results = [x for x in possible_results if x <= 21]
 

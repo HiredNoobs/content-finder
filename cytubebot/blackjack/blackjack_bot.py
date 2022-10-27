@@ -1,4 +1,5 @@
 import socketio
+
 from cytubebot.blackjack.dealer import Dealer
 from cytubebot.blackjack.player import Player
 
@@ -7,8 +8,9 @@ class BlackjackBot:
     commands = ['!join', '!bet', '!hit', '!split', '!hold']
     admin_commands = ['!start', '!stop_blackjack']
 
-    def __init__(self, socket: socketio, player: str,
-                 starting_chips: int = 1000) -> None:
+    def __init__(
+        self, socket: socketio, player: str, starting_chips: int = 1000
+    ) -> None:
         # Socket will be used as 'write' only i.e. the main bot will handle
         # all the main reading so that we don't process everything twice.
         self.sio = socket
@@ -21,9 +23,7 @@ class BlackjackBot:
         msg = f'Starting chips for all players set to {self.starting_chips}'
         self.sio.emit('chatMsg', {'msg': msg})
 
-        self.players = {
-            player: Player(self.starting_chips)
-        }
+        self.players = {player: Player(self.starting_chips)}
         self.dealer = Dealer()
 
         self.started = False
@@ -42,8 +42,10 @@ class BlackjackBot:
                 self.sio.emit('chatMsg', {'msg': msg})
             case '!start':
                 if self.started:
-                    msg = ('Blackjack already in progress, use "!join" to play'
-                           ' the next round.')
+                    msg = (
+                        'Blackjack already in progress, use "!join" to play'
+                        ' the next round.'
+                    )
                     self.sio.emit('chatMsg', {'msg': msg})
                     return
                 self.started = True
@@ -126,14 +128,14 @@ class BlackjackBot:
                     player_obj.hand.append(card)
                     # msg = f'{player} gets {card}.'
                     # self.sio.emit('chatMsg', {'msg': msg})
-                
+
                 card = self.dealer.get_card_from_deck()
                 self.dealer.hand.append(card)
                 # msg = 'Dealer gets face down card.' if i == 0 else f'Dealer gets {card}.'
                 # self.sio.emit('chatMsg', {'msg': msg})
 
             hand_art = self.dealer.get_hand_ascii()
-            msg = f'Dealers hand:'
+            msg = 'Dealers hand:'
             self.sio.emit('chatMsg', {'msg': msg})
             for line in hand_art:
                 self.sio.emit('chatMsg', {'msg': line})
@@ -179,19 +181,21 @@ class BlackjackBot:
                         if command:
                             break
                         self.sio.sleep(0.5)
-                    
+
                     # Skip player if no command given
                     # TODO: Remove player if they continue to fail to play
                     if not player_obj.command:
                         msg = f'{player} did not give a command in time, skipping.'
                         self.sio.emit('chatMsg', {'msg': msg})
                         break
-                    
+
                     match command:
                         case 'hit':
                             card = self.dealer.get_card_from_deck()
                             player_obj.hand.append(card)
-                            msg = f'{player} gets {card}, current hand: {player_obj.hand}'
+                            msg = (
+                                f'{player} gets {card}, current hand: {player_obj.hand}'
+                            )
                             self.sio.emit('chatMsg', {'msg': msg})
 
                             if player_obj.check_blackjack():
@@ -242,7 +246,9 @@ class BlackjackBot:
             self.dealer.set_result()
 
             # Payout
-            dealer_result = self.dealer.result  # either None or best numerical value of hand
+            dealer_result = (
+                self.dealer.result
+            )  # either None or best numerical value of hand
             for player, player_obj in self.players.items():
                 # Skip players who didn't bet
                 if player_obj.bet == 0:

@@ -1,73 +1,73 @@
-import sqlite3
+import atexit
+import logging
 import os
+import typing
+
 import requests
 from bs4 import BeautifulSoup as bs
+from psycopg_pool import ConnectionPool
 
 
 class DBHandler:
     def __init__(self) -> None:
-        self.last_updated = None
+        self._logger = logging.getLogger(__name__)
+        # self.last_updated = None
 
         self.db_file = '/app/content.db'
 
-    def init_db(self) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
+        conn_info = (
+            'postgres://'
+            f'{os.getenv("POSTGRES_USER")}:{os.getenv("POSTGRES_PASSWORD")}'
+            '@postgres.content-finder:5432/content?connect_timeout=30'
+        )
+        self._pool = ConnectionPool(conn_info)
+
+        # When the module exits this should force close the pool of conns
+        atexit.register(self._close_pool)
+
+    def _execute(self, query: str, params: typing.Tuple = None) -> list | None:
         """
-        Opens and returns an open DB conn and cursor.
-
-        returns:
-            A tuple containing a connection to the DB and a cursor.
+        Extremely generic method for executing any single query against the DB.
+        Method will take a connection from the pool, create a cursor, execute
+        the given query - while supplying any params, if a SELECT is given the
+        method will call .fetchall() and return the results, and commit any
+        changes to the DB then return None.
         """
-        con = sqlite3.connect(self.db_file)
-        cur = con.cursor()
-        cur.execute('CREATE TABLE IF NOT EXISTS content (channelId text '
-                    'primary key, name text, datetime text)')
-        con.commit()
+        self._logger.info(f'Executing {query} with {params}.')
+        query_type = query.split()[0]
+        results = None
+        with self._pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                self._logger.info(cur.statusmessage)
+                if query_type == 'SELECT':
+                    results = cur.fetchall()
+            conn.commit()
+        return results
 
-        return con, cur
+    def _close_pool(self) -> None:
+        self._logger.info('Closing Postgres connnection pool.')
+        self._pool.close()
 
-    def pop_db(self) -> None:
-        """
-        Reads from channel-ids.txt and inserts into DB. Inserts date of most
-        recent video.
+    def update_datetime(self, channel_id: str, new_dt: str) -> None:
+        query = 'UPDATE content SET datetime = %s WHERE channelId = %s'
+        self._execute(query, (new_dt, channel_id))
 
-        channels-ids.txt must be in the form:
-        # CHANNEL_NAME
-        CHANNEL_ID
-        # CHANNEL_NAME
-        CHANNEL_NAME
-        """
-        con, cur = self.init_db()
+    def add_channel(self, channel_id: str, channel_name: str) -> None:
+        channel = f'https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}'
+        resp = requests.get(channel)
+        page = resp.text
+        soup = bs(page, 'lxml')
+        entry = soup.find_all('entry')[0]
+        published = entry.find_all('published')[0].text
 
-        updated = os.path.getmtime(os.path.dirname(os.path.realpath(__file__)))
+        query = 'INSERT INTO content(channelId, name, datetime) VALUES (%s,%s,%s)'
+        self._execute(query, (channel_id, channel_name, published))
 
-        if self.last_updated is not None and self.last_updated == updated:
-            print('File not updated, nothing to add to DB.')
-            return
+    def remove_channel(self, channel_name) -> None:
+        query = 'DELETE FROM content WHERE name = %s LIMIT 1'
+        self._execute(query, (channel_name,))
 
-        with open('channel-ids.txt') as file:
-            for line in file:
-                name = line[1:].strip()
-                # this will raise StopIteration if you channel-ids doesn't have
-                # even lines i.e. if someone doesn't read the readme
-                channel_id = next(file).strip()
-
-                # Get most recent published date for datetime in DB
-                channel = ('https://www.youtube.com/feeds/videos.xml?'
-                           f'channel_id={channel_id}')
-                resp = requests.get(channel)
-                page = resp.text
-                soup = bs(page, 'lxml')
-                entry = soup.find_all('entry')[0]
-                published = entry.find_all('published')[0].text
-
-                try:
-                    query = ('INSERT INTO content(channelId, name, datetime) '
-                             'VALUES(?,?,?)')
-                    cur.execute(query, (channel_id, name, published,))
-                    con.commit()
-                except sqlite3.IntegrityError:
-                    print(f'{name} already in db, skipping.')
-
-        self.last_updated = updated
-        cur.close()
-        con.close()
+    @property
+    def pool(self) -> ConnectionPool:
+        return self._pool

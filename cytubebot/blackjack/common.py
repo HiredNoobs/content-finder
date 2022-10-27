@@ -3,16 +3,9 @@ from collections import namedtuple  # for type hinting
 
 def get_ascii_art(card: namedtuple) -> list:
     """Thanks to: https://codereview.stackexchange.com/questions/82103/ascii-fication-of-playing-cards"""
-    special_mappings = {
-        1: 'Ace',
-        11: 'Jack',
-        12: 'Queen',
-        13: 'King'
-    }
-    
-    suits = {
-        'spades': '♠', 'diamonds': '♦', 'hearts': '♥', 'clubs': '♣'
-    }
+    special_mappings = {1: 'Ace', 11: 'Jack', 12: 'Queen', 13: 'King'}
+
+    suits = {'spades': '♠', 'diamonds': '♦', 'hearts': '♥', 'clubs': '♣'}
 
     lines = [[] for i in range(9)]
 
@@ -24,7 +17,7 @@ def get_ascii_art(card: namedtuple) -> list:
             rank = special_mappings[card.value][0]
         else:
             rank = str(card.value)[0]  # get first char
-        
+
         space = '   '
 
     suit = suits[card.suit]
@@ -46,11 +39,18 @@ def get_ascii_art(card: namedtuple) -> list:
 
     return result
 
+
 def get_hidden_ascii_art() -> list:
     lines = [
-        '┌─────────┐', '│░░░░░░░░░│', '│░░░░░░░░░│', '│░░░░░░░░░│',
-        '│░░░░░░░░░│', '│░░░░░░░░░│', '│░░░░░░░░░│', '│░░░░░░░░░│',
-        '└─────────┘'
+        '┌─────────┐',
+        '│░░░░░░░░░│',
+        '│░░░░░░░░░│',
+        '│░░░░░░░░░│',
+        '│░░░░░░░░░│',
+        '│░░░░░░░░░│',
+        '│░░░░░░░░░│',
+        '│░░░░░░░░░│',
+        '└─────────┘',
     ]
 
     # for idx, line in enumerate(lines):
