@@ -13,7 +13,6 @@ class ContentFinder:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
         self._db = DBHandler()
-        # self._db.init_db()
 
     def find_content(self) -> list[namedtuple]:
         """

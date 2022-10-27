@@ -5,9 +5,6 @@ from cytubebot.blackjack.player import Player
 
 
 class BlackjackBot:
-    commands = ['!join', '!bet', '!hit', '!split', '!hold']
-    admin_commands = ['!start', '!stop_blackjack']
-
     def __init__(
         self, socket: socketio, player: str, starting_chips: int = 1000
     ) -> None:

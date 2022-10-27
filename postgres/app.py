@@ -11,6 +11,7 @@ app = Flask(__name__)
 def index() -> None:
     pid = 1
     os.kill(pid, signal.SIGTERM)
+    return '', 200
 
 
 if __name__ == '__main__':
