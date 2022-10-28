@@ -28,16 +28,16 @@ class ChatProcessor:
 
     def process_chat(self, chat_msg) -> None:
         user = chat_msg['username']
-        if user == os.getenv('CYTUBE_USERNAME'):
-            return
-
-        # Ignore older messages
+        command = chat_msg['msg'].split()[0].casefold()
         chat_ts = datetime.fromtimestamp(chat_msg['time'] / 1000)
         delta = datetime.now() - timedelta(seconds=10)
-        if chat_ts < delta:
-            return
 
-        command = chat_msg['msg'].split()[0].casefold()
+        if (
+            (chat_ts < delta)
+            or (user == os.getenv('CYTUBE_USERNAME'))
+            or (not command[:1] == '!')
+        ):
+            return
 
         try:
             args = [x.casefold() for x in chat_msg['msg'].split()[1:]]
@@ -112,10 +112,10 @@ class ChatProcessor:
                 remove_user(args, self._db, self._sio)
             case '!help':
                 msg = (
-                    f'Standard commands: {Commands.STANDARD_COMMANDS}'
-                    f', Admin commands: {Commands.ADMIN_COMMANDS}'
-                    f', blackjack commands: {Commands.BLACKJACK_COMMANDS}'
-                    f', blackjack admin commmands: {Commands.BLACKJACK_ADMIN_COMMANDS}'
+                    f'Standard commands: {Commands.STANDARD_COMMANDS.value}'
+                    f', Admin commands: {Commands.ADMIN_COMMANDS.value}'
+                    f', blackjack commands: {Commands.BLACKJACK_COMMANDS.value}'
+                    f', blackjack admin commmands: {Commands.BLACKJACK_ADMIN_COMMANDS.value}'
                 )
                 self._sio.emit('chatMsg', {'msg': msg})
             case '!kill':
@@ -123,7 +123,7 @@ class ChatProcessor:
                     self.blackjack_bot.kill = True
 
                 # Kill the DB container
-                requests.get('http://postgres.content-finder:5000')
+                requests.get('http://postgres.content-finder:5000', timeout=60)
 
                 self._sio.emit('chatMsg', {'msg': 'Bye bye!'})
                 self._sio.sleep(3)  # temp sol to allow the chat msg to send
