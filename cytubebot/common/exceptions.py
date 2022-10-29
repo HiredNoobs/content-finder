@@ -4,3 +4,7 @@ class MissingEnvVar(Exception):
 
 class MissingConfVar(Exception):
     pass
+
+
+class InvalidTagError(Exception):
+    pass

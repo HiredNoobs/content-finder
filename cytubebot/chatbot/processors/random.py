@@ -21,7 +21,5 @@ def random_handler(command, args, random_finder, sio, sio_data) -> None:
         msg = f'Searched: {search_str}, added: {rand_id}'
         sio.emit('chatMsg', {'msg': msg})
     else:
-        msg = (
-            'Found no random videos.. Try again. ' 'If giving arg over 5, try reducing.'
-        )
+        msg = 'Found no random videos.. Try again. If giving arg over 5, try reducing.'
         sio.emit('chatMsg', {'msg': msg})

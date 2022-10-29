@@ -1,7 +1,7 @@
-def content_handler(content_finder, db, sio, sio_data) -> None:
+def content_handler(content_finder, tag, db, sio, sio_data) -> None:
     sio.emit('chatMsg', {'msg': 'Searching for content...'})
 
-    content, count = content_finder.find_content()
+    content, count = content_finder.find_content(tag)
 
     if count == 0:
         sio.emit('chatMsg', {'msg': 'No content to add.'})

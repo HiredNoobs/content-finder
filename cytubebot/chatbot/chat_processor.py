@@ -7,8 +7,10 @@ import requests
 from cytubebot.blackjack.blackjack_bot import BlackjackBot
 from cytubebot.chatbot.processors.content import content_handler
 from cytubebot.chatbot.processors.random import random_handler
+from cytubebot.chatbot.processors.tags import add_tags, remove_tags
 from cytubebot.chatbot.processors.user_management import add_user, remove_user
 from cytubebot.common.commands import Commands
+from cytubebot.common.exceptions import InvalidTagError
 from cytubebot.contentfinder.content_finder import ContentFinder
 from cytubebot.contentfinder.database import DBHandler
 from cytubebot.randomvideo.random_finder import RandomFinder
@@ -40,7 +42,7 @@ class ChatProcessor:
             return
 
         try:
-            args = [x.casefold() for x in chat_msg['msg'].split()[1:]]
+            args = [x for x in chat_msg['msg'].split()[1:]]
         except IndexError:
             args = None
 
@@ -88,8 +90,12 @@ class ChatProcessor:
     def _process_command(self, user, command, args) -> None:
         match command:
             case '!content':
+                if args:
+                    tag = args[0].upper()
+                else:
+                    tag = None
                 content_handler(
-                    self._content_finder, self._db, self._sio, self._sio_data
+                    self._content_finder, tag, self._db, self._sio, self._sio_data
                 )
             case '!random' | '!random_word':
                 random_handler(
@@ -110,6 +116,18 @@ class ChatProcessor:
                 add_user(args, self._db, self._sio)
             case '!remove':
                 remove_user(args, self._db, self._sio)
+            case '!add_tags' | '!remove_tags':
+                try:
+                    if command == '!add_tags':
+                        add_tags(args, self._db)
+                    else:
+                        remove_tags(args, self._db)
+                except IndexError:
+                    msg = 'Not enough args supplied for !add_tags.'
+                    self._sio.emit('chatMsg', {'msg': msg})
+                except InvalidTagError:
+                    msg = f'One or more tags in {args[1:]} is invalid.'
+                    self._sio.emit('chatMsg', {'msg': msg})
             case '!help':
                 msg = (
                     f'Standard commands: {Commands.STANDARD_COMMANDS.value}'
@@ -123,7 +141,7 @@ class ChatProcessor:
                     self.blackjack_bot.kill = True
 
                 # Kill the DB container
-                requests.get('http://postgres.content-finder:5000', timeout=60)
+                requests.get('http://postgres.content-finder:5000/shutdown', timeout=60)
 
                 self._sio.emit('chatMsg', {'msg': 'Bye bye!'})
                 self._sio.sleep(3)  # temp sol to allow the chat msg to send

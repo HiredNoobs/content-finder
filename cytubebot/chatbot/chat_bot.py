@@ -36,7 +36,7 @@ class ChatBot:
             A str containing the url of the socket server.
         """
         socket_conf = f'{self.url}socketconfig/{self.channel_name}.json'
-        resp = requests.get(socket_conf)
+        resp = requests.get(socket_conf, timeout=60)
         self._logger.info(f'resp: {resp.status_code} - {resp.reason}')
         servers = resp.json()
         socket_url = ''
@@ -134,7 +134,8 @@ class ChatBot:
                 self._logger.info("queue err doesn't contain key 'id'")
 
         @self.sio.event
-        def connect_error():
+        def connect_error(err):
+            self._logger.info(f'Error: {err}')
             self._logger.info('Socket connection error. Attempting reconnect.')
             socket_url = self._init_socket()
             self.sio.connect(socket_url)

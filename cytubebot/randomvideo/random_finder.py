@@ -24,7 +24,7 @@ class RandomFinder:
 
         self._logger.info(f'Finding random with {rand_str}')
         url = f'https://www.youtube.com/results?search_query={rand_str}'
-        resp = requests.get(url)
+        resp = requests.get(url, timeout=60)
 
         # Thankfully the video data is stored as json in script tags
         # We just have to pull the json out...

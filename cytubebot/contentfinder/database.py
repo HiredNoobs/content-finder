@@ -36,9 +36,10 @@ class DBHandler:
         with self._pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
-                self._logger.info(cur.statusmessage)
+                self._logger.info(f'{cur.statusmessage=}')
                 if query_type == 'SELECT':
                     result = cur.fetchall()
+                    self._logger.info(f'{result=}')
             conn.commit()
         return result
 
@@ -50,9 +51,18 @@ class DBHandler:
         query = 'UPDATE content SET datetime = %s WHERE channelId = %s'
         self._execute(query, (new_dt, channel_id))
 
+    def get_channels(self, tag: str = None) -> list:
+        if tag:
+            query = 'SELECT * FROM content WHERE %s = ANY(tags)'
+            channels = self._execute(query, (tag,))
+        else:
+            query = 'SELECT * FROM content'
+            channels = self._execute(query)
+        return channels
+
     def add_channel(self, channel_id: str, channel_name: str) -> None:
         channel = f'https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}'
-        resp = requests.get(channel)
+        resp = requests.get(channel, timeout=60)
         page = resp.text
         soup = bs(page, 'lxml')
         entry = soup.find_all('entry')[0]
@@ -64,6 +74,26 @@ class DBHandler:
     def remove_channel(self, channel_name) -> None:
         query = 'DELETE FROM content WHERE ctid IN (SELECT ctid FROM content WHERE name = %s LIMIT 1)'
         self._execute(query, (channel_name,))
+
+    def add_tags(self, channel_id: str, new_tags: list) -> None:
+        query = 'SELECT tags FROM content WHERE channelid = %s'
+        tags = self._execute(query, (channel_id,))[0][0]
+        if not tags:
+            tags = []
+        for new_tag in new_tags:
+            if new_tag not in tags:
+                tags.append(new_tag)
+        query = 'UPDATE content SET tags = %s WHERE channelid = %s'
+        self._execute(query, (tags, channel_id))
+
+    def remove_tags(self, channel_id: str, tags_to_remove: list) -> None:
+        query = 'SELECT tags FROM content WHERE channelid = %s'
+        tags = self._execute(query, (channel_id,))[0][0]
+        if not tags:
+            tags = []
+        tags = [x for x in tags if x not in tags_to_remove]
+        query = 'UPDATE content SET tags = %s WHERE channelid = %s'
+        self._execute(query, (tags, channel_id))
 
     @property
     def pool(self) -> ConnectionPool:
