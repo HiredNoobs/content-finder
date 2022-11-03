@@ -46,26 +46,24 @@ class ChatProcessor:
         except IndexError:
             args = None
 
-        if (
-            command in Commands.STANDARD_COMMANDS.value
-            or command in Commands.BLACKJACK_COMMANDS.value
+        if command in list(Commands.STANDARD_COMMANDS.value.keys()) or command in list(
+            Commands.BLACKJACK_COMMANDS.value.keys()
         ):
-            if command in Commands.STANDARD_COMMANDS.value:
+            if command in list(Commands.STANDARD_COMMANDS.value.keys()):
                 self._process_chat_command(user, command, args)
-            elif command in Commands.BLACKJACK_COMMANDS.value:
+            elif command in list(Commands.BLACKJACK_COMMANDS.value.keys()):
                 self._process_blackjack_chat_command(user, command, args)
-        elif (
-            command in Commands.ADMIN_COMMANDS.value
-            or command in Commands.BLACKJACK_ADMIN_COMMANDS.value
+        elif command in list(Commands.ADMIN_COMMANDS.value.keys()) or command in list(
+            Commands.BLACKJACK_ADMIN_COMMANDS.value.keys()
         ):
             if self._sio_data.users.get(chat_msg['username'], 0) < 3:
                 msg = 'You don\'t have permission to do that.'
                 self._sio.emit('chatMsg', {'msg': msg})
                 return
 
-            if command in Commands.ADMIN_COMMANDS.value:
+            if command in list(Commands.ADMIN_COMMANDS.value.keys()):
                 self._process_chat_command(user, command, args, allow_force=True)
-            elif command in Commands.BLACKJACK_ADMIN_COMMANDS.value:
+            elif command in list(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys()):
                 self._process_blackjack_chat_command(user, command, args)
         else:
             msg = f'{command} is not a valid command'
