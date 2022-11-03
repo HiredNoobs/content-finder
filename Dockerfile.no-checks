@@ -1,4 +1,4 @@
-ARG python=python:3.10-slim-buster
+ARG python=python:3.11-slim-bullseye
 
 #################################################
 ######## Setup venv and install application
