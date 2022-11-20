@@ -39,7 +39,7 @@ class RandomFinder:
         try:
             rand_num = random.randrange(len(vids))
         except ValueError:
-            return None
+            return None, None
 
         return vids[rand_num]['videoRenderer']['videoId'], rand_str
 
