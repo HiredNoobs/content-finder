@@ -5,6 +5,8 @@ import psycopg
 import requests
 from bs4 import BeautifulSoup as bs
 
+from cytubebot.common.socket_extensions import send_chat_msg
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +29,7 @@ def add_user(args, db, sio) -> None:
         results = re.search('.*"browse_id","value":"(.*?)"', yt_initial_data.text)
         channel_id = results.group(1)
         msg = f'Found channel ID: {channel_id} for {channel_name}, adding to DB.'
-        sio.emit('chatMsg', {'msg': msg})
+        send_chat_msg(sio, msg)
     except AttributeError:
         logger.info(f'Failed to find channel_id for {channel_name}.')
         try:
@@ -43,18 +45,18 @@ def add_user(args, db, sio) -> None:
             channel_name = results.group(1)
             msg = f'Found channel name: {channel_name} for {channel_id}, adding to DB.'
             logger.info(msg)
-            sio.emit('chatMsg', {'msg': msg})
+            send_chat_msg(sio, msg)
         except AttributeError:
             msg = f"Couldn't find channel: {channel}"
             logger.error(msg)
-            sio.emit('chatMsg', {'msg': msg})
+            send_chat_msg(sio, msg)
             return
 
     try:
         db.add_channel(channel_id, channel_name)
     except psycopg.errors.UniqueViolation:
         msg = f'{channel_name} already in Database.'
-        sio.emit('chatMsg', {'msg': msg})
+        send_chat_msg(sio, msg)
 
 
 def cleanse_yt_crap(channel_name_or_url: str) -> str:
@@ -91,6 +93,6 @@ def remove_user(args, db, sio) -> None:
         channel_name = re.search(r'.*>(.*?)</a>', channel_name).group(1)
 
     msg = f'Deleting {channel_name} from DB.'
-    sio.emit('chatMsg', {'msg': msg})
+    send_chat_msg(sio, msg)
 
     db.remove_channel(channel_name)

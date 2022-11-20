@@ -10,6 +10,8 @@ class SIOData:
     _queue_resp: str = None
     _queue_err: bool = False
     _lock: bool = False
+    _current_media: dict = None
+    _queue_position: int = -1
     _users: dict = field(default_factory=dict)
 
     @property
@@ -35,6 +37,22 @@ class SIOData:
     @lock.setter
     def lock(self, value: str) -> None:
         self._lock = value
+
+    @property
+    def current_media(self) -> dict:
+        return self._current_media
+
+    @current_media.setter
+    def current_media(self, value: dict) -> None:
+        self._current_media = value
+
+    @property
+    def queue_position(self) -> int:
+        return self._queue_position
+
+    @queue_position.setter
+    def queue_position(self, value: int) -> None:
+        self._queue_position = value
 
     @property
     def users(self) -> dict:
