@@ -19,38 +19,52 @@ def add_user(args, db, sio) -> None:
     channel_name = ''.join(args)
     channel_name = cleanse_yt_crap(channel_name)
 
-    channel = f'https://www.youtube.com/c/{channel_name}'
-
-    resp = requests.get(channel, cookies={'CONSENT': 'YES+1'}, timeout=60)
-    page = resp.text
-    soup = bs(page, 'lxml')
-    yt_initial_data = soup.find('script', string=re.compile('ytInitialData'))
     try:
+        channel = f'https://www.youtube.com/@{channel_name}'
+        resp = requests.get(channel, cookies={'CONSENT': 'YES+1'}, timeout=60)
+        page = resp.text
+        soup = bs(page, 'lxml')
+        yt_initial_data = soup.find('script', string=re.compile('ytInitialData'))
         results = re.search('.*"browse_id","value":"(.*?)"', yt_initial_data.text)
         channel_id = results.group(1)
         msg = f'Found channel ID: {channel_id} for {channel_name}, adding to DB.'
+        logger.info(msg)
         send_chat_msg(sio, msg)
     except AttributeError:
-        logger.info(f'Failed to find channel_id for {channel_name}.')
         try:
-            channel_id = str(channel_name)
-            channel = f'https://www.youtube.com/channel/{channel_id}'
+            channel = f'https://www.youtube.com/c/{channel_name}'
             resp = requests.get(channel, cookies={'CONSENT': 'YES+1'}, timeout=60)
             page = resp.text
             soup = bs(page, 'lxml')
             yt_initial_data = soup.find('script', string=re.compile('ytInitialData'))
-            results = re.search(
-                '.*"channelMetadataRenderer":{"title":"(.*?)"', yt_initial_data.text
-            )
-            channel_name = results.group(1)
-            msg = f'Found channel name: {channel_name} for {channel_id}, adding to DB.'
+            results = re.search('.*"browse_id","value":"(.*?)"', yt_initial_data.text)
+            channel_id = results.group(1)
+            msg = f'Found channel ID: {channel_id} for {channel_name}, adding to DB.'
             logger.info(msg)
             send_chat_msg(sio, msg)
         except AttributeError:
-            msg = f"Couldn't find channel: {channel}"
-            logger.error(msg)
-            send_chat_msg(sio, msg)
-            return
+            logger.info(f'Failed to find channel_id for {channel_name}.')
+            try:
+                channel_id = str(channel_name)
+                channel = f'https://www.youtube.com/channel/{channel_id}'
+                resp = requests.get(channel, cookies={'CONSENT': 'YES+1'}, timeout=60)
+                page = resp.text
+                soup = bs(page, 'lxml')
+                yt_initial_data = soup.find(
+                    'script', string=re.compile('ytInitialData')
+                )
+                results = re.search(
+                    '.*"channelMetadataRenderer":{"title":"(.*?)"', yt_initial_data.text
+                )
+                channel_name = results.group(1)
+                msg = f'Found channel name: {channel_name} for {channel_id}, adding to DB.'
+                logger.info(msg)
+                send_chat_msg(sio, msg)
+            except AttributeError:
+                msg = f"Couldn't find channel: {channel}"
+                logger.error(msg)
+                send_chat_msg(sio, msg)
+                return
 
     try:
         db.add_channel(channel_id, channel_name)
@@ -60,6 +74,8 @@ def add_user(args, db, sio) -> None:
 
 
 def cleanse_yt_crap(channel_name_or_url: str) -> str:
+    channel_name_or_url = channel_name_or_url.strip()
+
     # Remove <a> tags if necessary
     if '</a>' in channel_name_or_url:
         channel_name_or_url = re.search(r'.*>(.*?)</a>', channel_name_or_url).group(1)
@@ -76,6 +92,9 @@ def cleanse_yt_crap(channel_name_or_url: str) -> str:
     if channel_name_or_url[-1:] == '/':
         channel_name_or_url = channel_name_or_url[:-1]
 
+    if channel_name_or_url[0] == '@':
+        channel_name_or_url = channel_name_or_url[1:]
+
     channel_name_or_url = channel_name_or_url.rsplit('/', 1)[-1]
 
     return channel_name_or_url
@@ -86,11 +105,7 @@ def remove_user(args, db, sio) -> None:
         return
 
     channel_name = ''.join(args)
-    channel_name = channel_name.strip()
-
-    # Remove <a> tags if necessary
-    if '</a>' in channel_name:
-        channel_name = re.search(r'.*>(.*?)</a>', channel_name).group(1)
+    channel_name = cleanse_yt_crap(channel_name)
 
     msg = f'Deleting {channel_name} from DB.'
     send_chat_msg(sio, msg)
