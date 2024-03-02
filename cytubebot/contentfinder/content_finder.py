@@ -71,7 +71,7 @@ class ContentFinder:
         resp = requests.head(
             shorts_url, cookies={'CONSENT': 'YES+1'}, timeout=60, allow_redirects=False
         )
-        if resp.status_code == 303:
+        if resp.status_code == 303 or resp.status_code == 302:
             return False
         # Assume any 2XX successfully reached a shorts page
         elif 200 <= resp.status_code <= 299:

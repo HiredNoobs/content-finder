@@ -6,7 +6,7 @@ RUN python -m pip install black \
     && python -m pip install isort \
     && echo "#!/bin/bash" > formatter.sh \
     && echo "black --skip-string-normalization /app/cytubebot/" >> formatter.sh \
-    && echo "isort cytubebot tests" >> formatter.sh \
+    && echo "isort --line-length 120 cytubebot tests" >> formatter.sh \
     && chmod +x formatter.sh
 
 CMD ["./formatter.sh"]

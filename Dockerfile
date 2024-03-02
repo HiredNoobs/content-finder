@@ -31,7 +31,6 @@ COPY --from=test-stage /app/setup.py /app/setup.cfg /app/
 RUN apt-get update \
     && apt-get install --no-install-recommends -yy \
     && python -m pip install --upgrade pip \
-    && python -m pip install virtualenv \
     && python -m venv venv
 
 ENV PATH="/app/venv/bin:$PATH"

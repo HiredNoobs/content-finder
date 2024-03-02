@@ -1,284 +1,180 @@
+import random
 import socketio
 
-from cytubebot.blackjack.dealer import Dealer
-from cytubebot.blackjack.player import Player
 from cytubebot.common.socket_extensions import send_chat_msg
 
 
 class BlackjackBot:
-    def __init__(
-        self, socket: socketio, player: str, starting_chips: int = 1000
-    ) -> None:
+    def __init__(self, socket: socketio, num_players=1, initial_balance=100):
         # Socket will be used as 'write' only i.e. the main bot will handle
         # all the main reading so that we don't process everything twice.
         self._sio = socket
-
-        try:
-            self.starting_chips = int(starting_chips)
-        except ValueError:
-            self.starting_chips = 1000
-
-        msg = f'Starting chips for all players set to {self.starting_chips}'
-        send_chat_msg(self._sio, msg)
-
-        self.players = {player: Player(self.starting_chips)}
-        self.dealer = Dealer()
-
-        self.started = False
-        self.bet_lock = False
-        self.kill = False
+        self.num_players = num_players
+        self.players = [self.create_player(initial_balance) for _ in range(num_players)]
+        self.deck = self.create_deck()
+        self.dealer_hand = []
 
     def process_command(self, user, command, args) -> None:
         match command:
-            case '!join':
-                if user in self.players.keys():
-                    msg = f'Player {user} already playing.'
-                    send_chat_msg(self._sio, msg)
-                    return
-                self.players[user] = Player(self.starting_chips)
-                msg = f'Player {user} successfully joined.'
-                send_chat_msg(self._sio, msg)
-            case '!start':
-                if self.started:
-                    msg = (
-                        'Blackjack already in progress, use "!join" to play'
-                        ' the next round.'
-                    )
-                    send_chat_msg(self._sio, msg)
-                    return
-                self.started = True
-                self._play_blackjack()
-            case '!bet':
-                if not self.started:
-                    msg = 'Blackjack not in progress...'
-                    send_chat_msg(self._sio, msg)
-                    return
-
-                if self.bet_lock:
-                    msg = 'You cannot bet right now.'
-                    send_chat_msg(self._sio, msg)
-                    return
-
-                try:
-                    bet = int(args[0])
-                except (IndexError, ValueError):
-                    msg = f'{user} - there was an error setting your bet, try again.'
-                    send_chat_msg(self._sio, msg)
-                    return
-
-                self.players[user].bet = bet
-
-                if self.players[user].error:
-                    msg = f'{user} - there was an error setting your bet, try again.'
-                    send_chat_msg(self._sio, msg)
-            case '!hit':
-                self.players[user].command = 'hit'
-            case '!split':
-                self.players[user].command = 'split'
-            case '!hold':
-                self.players[user].command = 'hold'
+            # case '!start_blackjack':
+            #     self.play()
             case '!stop_blackjack':
-                if not self.started:
-                    msg = 'Blackjack not in progress...'
-                    send_chat_msg(self._sio, msg)
-                    return
-                self.kill = True
-                msg = 'Blackjack will end after this round.'
-                send_chat_msg(self._sio, msg)
-            case _:
-                msg = f'Missing case for command {command}'
-                send_chat_msg(self._sio, msg)
+                print('STOP')
 
-    def _play_blackjack(self) -> None:
+    def create_player(self, initial_balance):
+        return {
+            'hand': [],
+            'split_hand': [],
+            'balance': initial_balance
+        }
+
+    def create_deck(self):
+        """Create a standard deck of cards."""
+        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+        suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
+        deck = [{'rank': rank, 'suit': suit} for rank in ranks for suit in suits]
+        random.shuffle(deck)
+        return deck
+
+    def deal_card(self, hand):
+        """Deal a card from the deck to a hand."""
+        card = self.deck.pop()
+        hand.append(card)
+
+    def calculate_hand_value(self, hand):
+        """Calculate the value of a hand."""
+        value = 0
+        num_aces = 0
+        for card in hand:
+            rank = card['rank']
+            if rank in ['J', 'Q', 'K']:
+                value += 10
+            elif rank == 'A':
+                num_aces += 1
+            else:
+                value += int(rank)
+
+        # Handle aces
+        for _ in range(num_aces):
+            if value + 11 <= 21:
+                value += 11
+            else:
+                value += 1
+        return value
+
+    def place_bet(self, player):
+        """Place a bet for a player."""
         while True:
-            if self.kill:
-                self.kill = False
-                self.started = False
-                return
-            if not self.players:
-                msg = 'There are no players, stopping blackjack...'
-                send_chat_msg(self._sio, msg)
-                self.started = False
-                return
-
-            msg = 'Setting up for new round please wait.'
-            send_chat_msg(self._sio, msg)
-
-            # NEW ROUND SETUP
-            self.dealer.reset()
-            for player in self.players:
-                self.players[player].reset()
-            self.bet_lock = False
-
-            # START NEW ROUND
-            msg = 'Place your bets (30 secs).'
-            send_chat_msg(self._sio, msg)
-
-            self._sio.sleep(30)
-            self.bet_lock = True
-
-            # Give players & dealer their cards
-            for i in range(0, 2):
-                # NOTE: Since we're not using an ordered dict, this order
-                # will be random every time.
-                for player, player_obj in self.players.items():
-                    card = self.dealer.get_card_from_deck()
-                    player_obj.hand.append(card)
-
-                card = self.dealer.get_card_from_deck()
-                self.dealer.hand.append(card)
-
-            hand_art = self.dealer.get_hand_ascii()
-            msg = 'Dealers hand:'
-            send_chat_msg(self._sio, msg)
-            for line in hand_art:
-                send_chat_msg(self._sio, line)
-                self._sio.sleep(0.25)
-
-            if self.dealer.check_blackjack():
-                msg = f'Dealer has blackjack with: {self.dealer.hand}'
-                send_chat_msg(self._sio, msg)
-                for player, player_obj in self.players.items():
-                    msg = f'{player} loses {player_obj.bet}.'
+            try:
+                bet = int(input(f"Player {self.players.index(player) + 1}, your balance: {player['balance']}. Place your bet: "))
+                if bet <= 0 or bet > player['balance']:
+                    msg = "Invalid bet. Please enter a valid amount."
                     send_chat_msg(self._sio, msg)
-                    player_obj.chips -= player_obj.bet
-                continue
-
-            # Play the hand
-            for player, player_obj in self.players.items():
-                if player_obj.bet == 0:
-                    continue
-
-                hand_art = player_obj.get_hand_ascii()
-                msg = f'{player}\'s hand:'
-                send_chat_msg(self._sio, msg)
-                for line in hand_art:
-                    send_chat_msg(self._sio, line)
-                    self._sio.sleep(0.25)
-
-                if player_obj.check_blackjack():
-                    msg = f'{player} has blackjack.'
-                    send_chat_msg(self._sio, msg)
-                    continue
-                msg = f'{player} - your turn to play.'
-                send_chat_msg(self._sio, msg)
-
-                # Getting command(s) for player hand
-                while True:
-                    msg = f'{player} would you like to !hit, !split, or !hold.'
-                    send_chat_msg(self._sio, msg)
-
-                    # Waiting for player to give command
-                    command = None
-                    for _ in range(0, 60):
-                        command = player_obj.command
-                        if command:
-                            break
-                        self._sio.sleep(0.5)
-
-                    # Skip player if no command given
-                    # TODO: Remove player if they continue to fail to play
-                    if not player_obj.command:
-                        msg = f'{player} did not give a command in time, skipping.'
-                        send_chat_msg(self._sio, msg)
-                        break
-
-                    match command:
-                        case 'hit':
-                            card = self.dealer.get_card_from_deck()
-                            player_obj.hand.append(card)
-                            msg = (
-                                f'{player} gets {card}, current hand: {player_obj.hand}'
-                            )
-                            send_chat_msg(self._sio, msg)
-
-                            if player_obj.check_blackjack():
-                                msg = f'{player} has blackjack.'
-                                send_chat_msg(self._sio, msg)
-                                break
-                            if player_obj.check_bust():
-                                msg = f'{player} is bust.'
-                                send_chat_msg(self._sio, msg)
-                                break
-                        case 'split':
-                            # TODO: Remove player if they try multiple times
-                            # when not available - this can currently be used
-                            # to hold the game hostage
-                            if not player_obj.check_split_available():
-                                msg = 'Split not available'
-                                send_chat_msg(self._sio, msg)
-                                continue
-                            # TODO: Add split func
-                            msg = 'Split not yet implemented, sorry!'
-                            send_chat_msg(self._sio, msg)
-                        case 'hold':
-                            break
-                        case _:
-                            pass
-                player_obj.set_result()
-
-            # Dealer players
-            while True:
-                if self.dealer.check_blackjack():
-                    msg = f'Dealer has blackjack with: {self.dealer.hand}'
-                    send_chat_msg(self._sio, msg)
-                    break
-                if self.dealer.check_bust():
-                    msg = f'Dealer is bust with: {self.dealer.hand}'
-                    send_chat_msg(self._sio, msg)
-                    break
-                if self.dealer.check_stand():
-                    msg = f'Dealer must stand with: {self.dealer.hand}'
-                    send_chat_msg(self._sio, msg)
-                    break
-
-                card = self.dealer.get_card_from_deck()
-                self.dealer.hand.append(card)
-                msg = f'Dealer gets {card}, current hand: {self.dealer.hand}'
-                send_chat_msg(self._sio, msg)
-
-            self.dealer.set_result()
-
-            # Payout
-            dealer_result = (
-                self.dealer.result
-            )  # either None or best numerical value of hand
-            for player, player_obj in self.players.items():
-                # Skip players who didn't bet
-                if player_obj.bet == 0:
-                    continue
-
-                # Player & dealer bust
-                if not player_obj.result and not dealer_result:
-                    msg = f'{player} draws with dealer, nothing lost.'
-                    send_chat_msg(self._sio, msg)
-                # Player bust, dealer not
-                elif not player_obj.result and dealer_result:
-                    player_obj.chips -= player_obj.bet
-                    msg = f'{player} loses {player_obj.bet}'
-                    send_chat_msg(self._sio, msg)
-                # Dealer bust, player not
-                elif player_obj.result and not dealer_result:
-                    player_obj.chips += player_obj.bet * 2
-                    msg = f'{player} wins {player_obj.bet * 2}'
-                    send_chat_msg(self._sio, msg)
-                # Player & dealer blackjack
-                elif player_obj.result == dealer_result:
-                    msg = f'{player} draws with dealer, nothing lost.'
-                    send_chat_msg(self._sio, msg)
-                # Player blackjack, dealer less than
-                elif player_obj.result == 21 and dealer_result < 21:
-                    winnings = player_obj.bet * (player_obj.bet * 1.5)
-                    player_obj.chips += winnings
-                    msg = f'{player} wins {winnings}'
-                    send_chat_msg(self._sio, msg)
-                # player win
-                elif player_obj.result > dealer_result:
-                    player_obj.chips += player_obj.bet * 2
-                    msg = f'{player} wins {player_obj.bet * 2}'
-                    send_chat_msg(self._sio, msg)
-                # Anything else should be a player loss
                 else:
-                    player_obj.chips -= player_obj.bet
-                    msg = f'{player} loses {player_obj.bet}'
+                    player['balance'] -= bet
+                    return bet
+            except ValueError:
+                msg = "Invalid input. Please enter a valid integer."
+                send_chat_msg(self._sio, msg)
+
+    def split(self, player):
+        """Split a player's hand into two separate hands."""
+        if len(player['hand']) == 2 and player['hand'][0]['rank'] == player['hand'][1]['rank']:
+            player['split_hand'].append([player['hand'].pop(), self.deck.pop()])
+            player['hand'].append(self.deck.pop())
+            msg = f"Player {self.players.index(player) + 1} has split their hand!"
+            send_chat_msg(self._sio, msg)
+
+    def double_down(self, player, bet):
+        """Double down a player's bet and deal one more card."""
+        if len(player['hand']) == 2:
+            player['balance'] -= bet
+            self.deal_card(player['hand'])
+            msg = f"Player {self.players.index(player) + 1} has doubled down!"
+            send_chat_msg(self._sio, msg)
+
+    def player_action(self, player, bet):
+        """Handle player actions (hit, stand, split, double down)."""
+        while True:
+            msg = f"Player {self.players.index(player) + 1}, your hand: {player['hand']} (Value: {self.calculate_hand_value(player['hand'])})"
+            send_chat_msg(self._sio, msg)
+            action = input("Do you want to hit, stand, split, or double down? ").lower()
+            if action == 'hit':
+                self.deal_card(player['hand'])
+                player_value = self.calculate_hand_value(player['hand'])
+                if player_value > 21:
+                    msg = f"Player {self.players.index(player) + 1} busts! You lose."
                     send_chat_msg(self._sio, msg)
+                    player['balance'] -= bet
+                    break
+            elif action == 'stand':
+                break
+            elif action == 'split':
+                self.split(player)
+            elif action == 'double':
+                self.double_down(player, bet)
+                break
+            else:
+                msg = "Invalid input. Please enter 'hit', 'stand', 'split', or 'double'."
+                send_chat_msg(self._sio, msg)
+
+    def resolve_bets(self, player, dealer_value, bet):
+        """Resolve bets for a player based on hand values."""
+        hand_value = self.calculate_hand_value(player['hand'])
+        if hand_value > 21:
+            msg = f"Player {self.players.index(player) + 1} busts! You lose."
+            send_chat_msg(self._sio, msg)
+            player['balance'] -= bet
+        elif dealer_value > 21 or dealer_value < hand_value:
+            msg = f"Player {self.players.index(player) + 1} wins! You won {bet} chips."
+            send_chat_msg(self._sio, msg)
+            player['balance'] += 2 * bet
+        elif dealer_value == hand_value:
+            msg = f"Player {self.players.index(player) + 1}, it's a tie! Your bet is returned."
+            send_chat_msg(self._sio, msg)
+            player['balance'] += bet
+        else:
+            msg = f"Player {self.players.index(player) + 1}, dealer wins. You lose your bet."
+            send_chat_msg(self._sio, msg)
+
+    def play(self):
+        """Play the multi-player blackjack game."""
+        msg = "Starting Blackjack!"
+        send_chat_msg(self._sio, msg)
+
+        # Deal initial cards
+        for _ in range(2):
+            for player in self.players:
+                self.deal_card(player['hand'])
+            self.deal_card(self.dealer_hand)
+
+        while any(player['balance'] > 0 for player in self.players):
+            self.dealer_hand = []
+            for player in self.players:
+                bet = self.place_bet(player)
+                self.player_action(player, bet)
+                if player['split_hand']:
+                    msg = 'SPLIT HAND ROUND'
+                    send_chat_msg(self._sio, msg)
+                    player['hand'] = player['split_hand']
+                    self.player_action(player, bet)
+
+            # Dealer's turn
+            while self.calculate_hand_value(self.dealer_hand) < 17:
+                self.deal_card(self.dealer_hand)
+            dealer_value = self.calculate_hand_value(self.dealer_hand)
+            msg = f"Dealer's hand: {self.dealer_hand} (Value: {dealer_value})"
+            send_chat_msg(self._sio, msg)
+
+            # Resolve bets
+            for player in self.players:
+                self.resolve_bets(player, dealer_value, bet)
+
+        msg = "Game over. Thanks for playing!"
+        send_chat_msg(self._sio, msg)
+
+
+if __name__ == "__main__":
+    num_players = 2  # Set the desired number of players
+    game = BlackjackBot(num_players=num_players)
+    game.play()

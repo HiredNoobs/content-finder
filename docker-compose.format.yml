@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  formatter.content-finder:
+    container_name: formatter.content-finder
+    build:
+      dockerfile: Dockerfile.format
+      context: .
+    volumes:
+      - ./cytubebot:/app/cytubebot:rw

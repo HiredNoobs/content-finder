@@ -112,9 +112,9 @@ class ChatProcessor:
                     send_chat_msg(self._sio, msg)
                     return
                 if args:
-                    self.blackjack_bot = BlackjackBot(self._sio, user, args[0])
+                    self.blackjack_bot = BlackjackBot(self._sio)  #, user, args[0])
                 else:
-                    self.blackjack_bot = BlackjackBot(self._sio, user)
+                    self.blackjack_bot = BlackjackBot(self._sio)  # , user)
                 msg = 'Starting blackjack, use !join to play.'
                 send_chat_msg(self._sio, msg)
             case 'current':

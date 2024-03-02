@@ -17,7 +17,7 @@ COPY ./init/ /docker-entrypoint-initdb.d/
 
 # Python Flask API setup
 COPY ./app.py ./requirements.txt ./run_app.sh /app/
-RUN python3 -m pip install virtualenv \
-    && chmod +x /app/run_app.sh
+
+RUN chmod +x /app/run_app.sh
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
