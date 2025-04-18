@@ -26,7 +26,8 @@ SET default_with_oids = false;
 CREATE TABLE public.content (
     channelid character varying(24) DEFAULT NULL::character varying PRIMARY KEY,
     name character varying(50) DEFAULT NULL::character varying,
-    datetime character varying(25) DEFAULT NULL::character varying
+    datetime character varying(25) DEFAULT NULL::character varying,
+    tags text[]
 );
 
 

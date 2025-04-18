@@ -1,9 +1,14 @@
 import logging
+import os
+
+from datetime import datetime, timedelta
 
 import requests
 import socketio
 
+from cytubebot.blackjack.blackjack_bot import BlackjackBot
 from cytubebot.chatbot.chat_processor import ChatProcessor
+from cytubebot.common.commands import Commands
 from cytubebot.chatbot.sio_data import SIOData
 from cytubebot.common.socket_extensions import send_chat_msg
 
@@ -11,7 +16,8 @@ from cytubebot.common.socket_extensions import send_chat_msg
 class ChatBot:
     """
     The ChatBot class is a socketio wrapper that handles **only** the socket
-    side of the chat bot. Processing chat should be passed to ChatProcessor.
+    side of the chat bot and basic processing, any specific processing
+    should be passed to the relevant class.
     """
 
     def __init__(
@@ -27,6 +33,7 @@ class ChatBot:
         self._sio = socketio.Client()  # For debugging: engineio_logger=True
         self._sio_data = SIOData()
         self._chat_processor = ChatProcessor(self._sio, self._sio_data)
+        self._blackjack_processor = BlackjackBot(self._sio)
 
     def _init_socket(self) -> str:
         """
@@ -92,7 +99,44 @@ class ChatBot:
         @self._sio.on('chatMsg')
         def chat(resp):
             self._logger.info(resp)
-            self._chat_processor.process_chat(resp)
+
+            username = resp['username']
+            command = resp['msg'].split()[0].casefold()
+            chat_ts = datetime.fromtimestamp(resp['time'] / 1000)
+            delta = datetime.now() - timedelta(seconds=10)
+
+            # Check if the message is recent, or from the bot, or isn't a command
+            if (
+                (chat_ts < delta)
+                or (username == os.getenv('CYTUBE_USERNAME'))
+                or (not command[:1] in Commands.COMMAND_SYMBOLS.value)
+            ):
+                return
+
+            command = command[1:]  # strip the command symbol
+            try:
+                args = [x for x in resp['msg'].split()[1:]]
+            except IndexError:
+                args = None
+
+            if command in list(Commands.STANDARD_COMMANDS.value.keys()) or command in list(Commands.ADMIN_COMMANDS.value.keys()):
+                if command in list(Commands.ADMIN_COMMANDS.value.keys()):
+                    if self._sio_data.users.get(username, 0) < 3:
+                        msg = 'You don\'t have permission to do that.'
+                        send_chat_msg(self._sio, msg)
+                    else:
+                        self._chat_processor.process_chat_command(username, command, args, allow_force=True)
+                else:
+                    self._chat_processor.process_chat_command(username, command, args)
+            elif command in list(Commands.BLACKJACK_COMMANDS.value.keys()) or command in list(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys()):
+                if command in list(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys()):
+                    if self._sio_data.users.get(username, 0) < 3:
+                        msg = 'You don\'t have permission to do that.'
+                        send_chat_msg(self._sio, msg)
+                self._blackjack_processor.process_chat_command(username, command, args)
+            else:
+                msg = f'{command} is not a valid command'
+                send_chat_msg(self._sio, msg)
 
         @self._sio.on('queue')
         @self._sio.on('queueWarn')
@@ -119,8 +163,8 @@ class ChatBot:
             self._logger.info(f'queue err: {resp}')
             try:
                 id = resp['id']
-                send_chat_msg(self._sio, f'Failed to add {id}, retrying in 2 secs.')
-                self._sio.sleep(2)
+                send_chat_msg(self._sio, f'Failed to add {id}, retrying in 4 secs.')
+                self._sio.sleep(4)
                 self._sio.emit(
                     'queue', {'id': id, 'type': 'yt', 'pos': 'end', 'temp': True}
                 )

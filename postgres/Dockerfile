@@ -1,4 +1,4 @@
-FROM postgres:15-alpine
+FROM postgres:17.4-alpine
 
 # Supervisord setup
 RUN apk --update --no-cache upgrade \
