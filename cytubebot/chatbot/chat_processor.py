@@ -1,12 +1,9 @@
 import logging
-import os
 import re
-# from datetime import datetime, timedelta
 
 import requests
 from bs4 import BeautifulSoup as bs
 
-# from cytubebot.blackjack.blackjack_bot import BlackjackBot
 from cytubebot.chatbot.processors.content import add_christmas_videos, content_handler
 from cytubebot.chatbot.processors.random import random_handler
 from cytubebot.chatbot.processors.tags import add_tags, remove_tags
@@ -26,86 +23,114 @@ class ChatProcessor:
         self._sio = sio  # A reference to the SocketIO client held in ChatBot
         self._sio_data = sio_data
 
-        # self.blackjack_bot = None
         self._db = DBHandler()
         self._random_finder = RandomFinder()
         self._content_finder = ContentFinder()
 
-    def process_chat_command(self, username, command, args, allow_force=False) -> None:
-        if self._sio_data.lock and not (allow_force and args and args[0] == '--force'):
-            msg = 'Already busy, please wait...'
-            send_chat_msg(self._sio, msg)
-        else:
-            self._sio_data.lock = True
-            self._process_command(username, command, args)
+    def process_chat_command(self, command, args, allow_force=False) -> None:
+        if self._sio_data.lock and not (allow_force and args and args[0] == "--force"):
+            send_chat_msg(self._sio, "Already busy, please wait...")
+            return
+
+        self._sio_data.lock = True
+        try:
+            self._process_command(command, args)
+        except Exception as err:
+            self._logger.exception(f"Error while processing command {command}: {err}")
+            send_chat_msg(self._sio, f"Error processing command: {err}")
+        finally:
             self._sio_data.lock = False
 
-    def _process_command(self, username, command, args) -> None:
+    def _process_command(self, command, args) -> None:
         match command:
-            case 'content':
-                if args:
-                    tag = args[0].upper()
-                else:
-                    tag = None
+            case "content":
+                tag = args[0].upper() if args else None
                 content_handler(
                     self._content_finder, tag, self._db, self._sio, self._sio_data
                 )
-            case 'random' | 'random_word':
+            case "random" | "random_word":
                 random_handler(
                     command, args, self._random_finder, self._sio, self._sio_data
                 )
-            case 'current':
-                self._sio.emit('playerReady')
-                curr = self._sio_data.current_media
-
-                url = f'https://www.youtube.com/watch?v={curr["id"]}'
-                resp = requests.get(url, timeout=60)
-                page = resp.text
-                soup = bs(page, 'lxml')
-                ytInitialPlayerResponse = soup.find(
-                    'script', string=re.compile('ytInitialPlayerResponse')
-                )
-                description = re.search(
-                    '.*"description":{"simpleText":"(.*?)"',
-                    ytInitialPlayerResponse.text,
-                ).group(1)
-                description = description.replace('\\n', ' ')
-
-                curr['description'] = description
-                self._logger.info(f'{curr=}')
-                msg = f'{curr}'
-                send_chat_msg(self._sio, msg)
-            case 'add':
+            case "current":
+                self._handle_current()
+            case "add":
                 add_user(args, self._db, self._sio)
-            case 'remove':
+            case "remove":
                 remove_user(args, self._db, self._sio)
-            case 'add_tags' | 'remove_tags':
-                try:
-                    if command == 'add_tags':
-                        add_tags(args, self._db)
-                    else:
-                        remove_tags(args, self._db)
-                except IndexError:
-                    msg = 'Not enough args supplied for !add_tags.'
-                    send_chat_msg(self._sio, msg)
-                except InvalidTagError:
-                    msg = f'One or more tags in {args[1:]} is invalid.'
-                    send_chat_msg(self._sio, msg)
-            case 'christmas' | 'xmas':
+            case "add_tags" | "remove_tags":
+                self._handle_tags(command, args)
+            case "christmas" | "xmas":
                 add_christmas_videos(self._sio)
-            case 'help':
-                msg = (
-                    f'Use any of {Commands.COMMAND_SYMBOLS.value=} with: '
-                    f'{Commands.STANDARD_COMMANDS.value=}, '
-                    f'{Commands.ADMIN_COMMANDS.value=}, '
-                    f'{Commands.BLACKJACK_COMMANDS.value=}, '
-                    f'{Commands.BLACKJACK_ADMIN_COMMANDS.value=}'
-                )
-                send_chat_msg(self._sio, msg)
-            case 'kill':
-                # Kill the DB container
-                requests.get('http://postgres.content-finder:5000/shutdown', timeout=60)
+            case "help":
+                self._handle_help()
+            case "kill":
+                self._handle_kill()
+            case _:
+                send_chat_msg(self._sio, f"Unknown command: {command}")
 
-                send_chat_msg(self._sio, 'Bye bye!')
-                self._sio.sleep(3)  # temp sol to allow the chat msg to send
-                self._sio.disconnect()
+    def _handle_current(self) -> None:
+        try:
+            self._sio.emit("playerReady")
+            curr = self._sio_data.current_media
+            video_id = curr.get("id")
+            if not video_id:
+                raise ValueError("No video id found in current media")
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            resp = requests.get(url, timeout=60)
+            resp.raise_for_status()
+
+            soup = bs(resp.text, "lxml")
+            script = soup.find("script", string=re.compile("ytInitialPlayerResponse"))
+            if not script:
+                raise ValueError("ytInitialPlayerResponse not found in page source.")
+
+            match_obj = re.search('.*"description":{"simpleText":"(.*?)"', script.text)
+            if match_obj:
+                description = match_obj.group(1).replace("\\n", " ")
+                curr["description"] = description
+            else:
+                curr["description"] = "Description not available"
+
+            self._logger.info("Current media: %s", curr)
+            send_chat_msg(self._sio, f"{curr}")
+        except Exception as err:
+            self._logger.exception(f"Error handling 'current' command: {err}")
+            send_chat_msg(self._sio, f"Error retrieving current media: {err}")
+
+    def _handle_tags(self, command: str, args: list) -> None:
+        try:
+            if command == "add_tags":
+                add_tags(args, self._db)
+            else:
+                remove_tags(args, self._db)
+        except IndexError:
+            send_chat_msg(self._sio, "Not enough args supplied for !add_tags.")
+        except InvalidTagError:
+            send_chat_msg(self._sio, f"One or more tags in {args[1:]} is invalid.")
+
+    def _handle_help(self) -> None:
+        """
+        Provides help information by listing available commands.
+        """
+        msg = (
+            f"Use any of {Commands.COMMAND_SYMBOLS.value} with: "
+            f"{Commands.STANDARD_COMMANDS.value}, "
+            f"{Commands.ADMIN_COMMANDS.value}, "
+            f"{Commands.BLACKJACK_COMMANDS.value}, "
+            f"{Commands.BLACKJACK_ADMIN_COMMANDS.value}"
+        )
+        send_chat_msg(self._sio, msg)
+
+    def _handle_kill(self) -> None:
+        try:
+            response = requests.get(
+                "http://postgres.content-finder:5000/shutdown", timeout=60
+            )
+            response.raise_for_status()
+            send_chat_msg(self._sio, "Bye bye!")
+            self._sio.sleep(3)  # Allows time for the chat message to be sent
+        except Exception as err:
+            self._logger.exception(f"Error during kill command: {err}")
+        finally:
+            self._sio.disconnect()

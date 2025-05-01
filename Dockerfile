@@ -1,55 +1,38 @@
-ARG python=python:3.11-slim-bullseye
+ARG PYTHON_IMAGE=python:3.11-slim-bullseye
 
 #################################################
-######## Setup + run tests
+# Build Stage: Create virtualenv and install dependencies
 #################################################
-FROM ${python} as test-stage
+FROM ${PYTHON_IMAGE} AS build-stage
 
 WORKDIR /app
 
-COPY ./setup.py ./setup.cfg ./tox.ini ./requirements.txt /app/
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+      gcc \
+      build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install -r requirements.txt \
-    && python -m pip install tox
+COPY requirements.txt /app/requirements.txt
 
-# Copy scripts - copying in this early is necessary but Docker will rebuild a lot of layers.
-COPY ./cytubebot ./cytubebot
-COPY ./tests ./tests
+RUN python -m venv /app/venv && \
+    /app/venv/bin/pip install --upgrade pip && \
+    /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt
 
-RUN tox
-
-#################################################
-######## Setup venv and install application
-#################################################
-FROM ${python} as build-stage
-
-WORKDIR /app
-
-COPY --from=test-stage /app/cytubebot/ /app/cytubebot/
-COPY --from=test-stage /app/setup.py /app/setup.cfg /app/
-
-RUN apt-get update \
-    && apt-get install --no-install-recommends -yy \
-    && python -m pip install --upgrade pip \
-    && python -m venv venv
-
-ENV PATH="/app/venv/bin:$PATH"
-
-RUN python -m pip install --upgrade pip \
-    && python -m pip install .
+COPY ./cytubebot/ /app/cytubebot/
 
 #################################################
-######## Production container
+# Production Stage
 #################################################
+FROM ${PYTHON_IMAGE} AS prod-stage
 
-FROM ${python} as prod-stage
-
-ENV PATH="/app/venv/bin:$PATH"
-
-# Copy scripts across from builder
 COPY --from=build-stage /app/venv/ /app/venv/
+COPY --from=build-stage /app/cytubebot/ /app/cytubebot/
 
-# Download english dictionary
 ADD https://github.com/dwyl/english-words/raw/master/words.txt /app/cytubebot/randomvideo/eng_dict.txt
+
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /app
 
 CMD ["python", "-m", "cytubebot"]

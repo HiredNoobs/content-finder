@@ -1,38 +1,28 @@
-version: '3.8'
-
 services:
-  postgres.content-finder:
-    container_name: postgres.content-finder
-    build: ./postgres
-    user: root
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: content
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d content -U root"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+  redis:
+    image: redis:7.4.2
+    ports:
+      - 6379:6379
     volumes:
-      - postgres_db:/var/lib/postgresql/data:rw
-      - ./postgres/backups/:/backups/:rw
+      - redis:/data
+    restart: unless-stopped
   content-finder:
     container_name: content-finder
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       PYTHONUNBUFFERED: 1
+      COMMAND_SYMBOLS: "!,$$,/"
       CYTUBE_URL: https://cytu.be/
-      CYTUBE_URL_CHANNEL_NAME: channel
-      CYTUBE_USERNAME: username
-      CYTUBE_PASSWORD: pass
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: pass
-      LOG_LEVEL: INFO
-    depends_on:
-      postgres.content-finder:
-        condition: service_healthy
+      CYTUBE_URL_CHANNEL_NAME: ${CYTUBE_URL_CHANNEL_NAME}
+      CYTUBE_USERNAME: ${CYTUBE_USERNAME}
+      CYTUBE_PASSWORD: ${CYTUBE_PASSWORD}
+      CYTUBE_MSG_LIMIT: 320
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      LOG_LEVEL: DEBUG
+    restart: unless-stopped
 
 volumes:
-  postgres_db:
-    external: true
+  redis:

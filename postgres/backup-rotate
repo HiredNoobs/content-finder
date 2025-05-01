@@ -1,7 +1,0 @@
-/backups/*.sql {
-    daily
-    missingok
-    rotate 30
-    maxage 7
-    dateext
-}

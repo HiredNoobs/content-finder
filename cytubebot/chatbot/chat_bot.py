@@ -1,6 +1,5 @@
 import logging
 import os
-
 from datetime import datetime, timedelta
 
 import requests
@@ -8,9 +7,11 @@ import socketio
 
 from cytubebot.blackjack.blackjack_bot import BlackjackBot
 from cytubebot.chatbot.chat_processor import ChatProcessor
-from cytubebot.common.commands import Commands
 from cytubebot.chatbot.sio_data import SIOData
+from cytubebot.common.commands import Commands
 from cytubebot.common.socket_extensions import send_chat_msg
+
+REQUIRED_PERMISSION_LEVEL = 3
 
 
 class ChatBot:
@@ -43,20 +44,20 @@ class ChatBot:
         returns:
             A str containing the url of the socket server.
         """
-        socket_conf = f'{self.url}socketconfig/{self.channel_name}.json'
+        socket_conf = f"{self.url}socketconfig/{self.channel_name}.json"
         resp = requests.get(socket_conf, timeout=60)
-        self._logger.info(f'resp: {resp.status_code} - {resp.reason}')
+        self._logger.info(f"resp: {resp.status_code} - {resp.reason}")
         servers = resp.json()
-        socket_url = ''
+        socket_url = ""
 
-        for server in servers['servers']:
-            if server['secure']:
-                socket_url = server['url']
+        for server in servers["servers"]:
+            if server["secure"]:
+                socket_url = server["url"]
                 break
 
         if not socket_url:
             raise socketio.exceptions.ConnectionError(
-                'Unable to find a secure socket to connect to'
+                "Unable to find a secure socket to connect to"
             )
 
         return socket_url
@@ -67,106 +68,129 @@ class ChatBot:
         waits for chat commands.
         """
 
+        def has_permission(
+            username: str, required: int = REQUIRED_PERMISSION_LEVEL
+        ) -> bool:
+            return self._sio_data.users.get(username, 0) >= required
+
+        standard_commands = set(Commands.STANDARD_COMMANDS.value.keys())
+        admin_commands = set(Commands.ADMIN_COMMANDS.value.keys())
+        blackjack_commands = set(Commands.BLACKJACK_COMMANDS.value.keys())
+        blackjack_admin_commands = set(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys())
+        command_symbols = tuple(Commands.COMMAND_SYMBOLS.value)
+
         @self._sio.event
         def connect():
-            self._logger.info('Socket connected!')
-            self._sio.emit('joinChannel', {'name': self.channel_name})
+            self._logger.info("Socket connected!")
+            self._sio.emit("joinChannel", {"name": self.channel_name})
 
-        @self._sio.on('channelOpts')
+        @self._sio.on("channelOpts")
         def channel_opts(resp):
             self._logger.info(resp)
-            self._sio.emit('login', {'name': self.username, 'pw': self.password})
+            self._sio.emit("login", {"name": self.username, "pw": self.password})
 
-        @self._sio.on('login')
+        @self._sio.on("login")
         def login(resp):
             self._logger.info(resp)
-            send_chat_msg(self._sio, 'Hello!')
+            send_chat_msg(self._sio, "Hello!")
 
-        @self._sio.on('userlist')
+        @self._sio.on("userlist")
         def userlist(resp):
             for user in resp:
-                self._sio_data.users[user['name']] = user['rank']
+                self._sio_data.users[user["name"]] = user["rank"]
 
-        @self._sio.on('addUser')  # User joins channel
-        @self._sio.on('setUserRank')
+        @self._sio.on("addUser")  # User joins channel
+        @self._sio.on("setUserRank")
         def user_add(resp):
-            self._sio_data.users[resp['name']] = resp['rank']
+            self._sio_data.users[resp["name"]] = resp["rank"]
 
-        @self._sio.on('userLeave')
+        @self._sio.on("userLeave")
         def user_leave(resp):
-            self._sio_data.users.pop(resp['name'], None)
+            self._sio_data.users.pop(resp["name"], None)
+            # TODO: Remove player from blackjack
 
-        @self._sio.on('chatMsg')
+        @self._sio.on("chatMsg")
         def chat(resp):
-            self._logger.info(resp)
+            self._logger.debug(resp)
 
-            username = resp['username']
-            command = resp['msg'].split()[0].casefold()
-            chat_ts = datetime.fromtimestamp(resp['time'] / 1000)
-            delta = datetime.now() - timedelta(seconds=10)
+            username = resp["username"]
+            raw_message = resp["msg"]
+            chat_ts = datetime.fromtimestamp(resp["time"] / 1000)
 
-            # Check if the message is recent, or from the bot, or isn't a command
-            if (
-                (chat_ts < delta)
-                or (username == os.getenv('CYTUBE_USERNAME'))
-                or (not command[:1] in Commands.COMMAND_SYMBOLS.value)
-            ):
+            # Only process messages sent within the last 10 seconds from a user other than self.
+            if chat_ts < datetime.now() - timedelta(
+                seconds=10
+            ) or username == os.getenv("CYTUBE_USERNAME"):
+                self._logger.debug(
+                    "Not processing {resp} due to either age or message from bot."
+                )
                 return
 
-            command = command[1:]  # strip the command symbol
-            try:
-                args = [x for x in resp['msg'].split()[1:]]
-            except IndexError:
-                args = None
+            parts = raw_message.split()
+            if not parts:
+                return
 
-            if command in list(Commands.STANDARD_COMMANDS.value.keys()) or command in list(Commands.ADMIN_COMMANDS.value.keys()):
-                if command in list(Commands.ADMIN_COMMANDS.value.keys()):
-                    if self._sio_data.users.get(username, 0) < 3:
-                        msg = 'You don\'t have permission to do that.'
-                        send_chat_msg(self._sio, msg)
-                    else:
-                        self._chat_processor.process_chat_command(username, command, args, allow_force=True)
+            raw_command = parts[0].casefold()
+            # Verify that the message starts with a valid command symbol.
+            if not raw_command.startswith(command_symbols):
+                return
+
+            self._logger.debug(f"Processing {raw_command}")
+
+            command = raw_command[1:]
+            args = parts[1:] if len(parts) > 1 else []
+
+            # Process normal / admin chat commands.
+            if command in standard_commands or command in admin_commands:
+                if command in admin_commands:
+                    if not has_permission(username):
+                        send_chat_msg(
+                            self._sio, "You don't have permission to do that."
+                        )
+                        return
+                    self._chat_processor.process_chat_command(
+                        command, args, allow_force=True
+                    )
                 else:
-                    self._chat_processor.process_chat_command(username, command, args)
-            elif command in list(Commands.BLACKJACK_COMMANDS.value.keys()) or command in list(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys()):
-                if command in list(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys()):
-                    if self._sio_data.users.get(username, 0) < 3:
-                        msg = 'You don\'t have permission to do that.'
-                        send_chat_msg(self._sio, msg)
+                    self._chat_processor.process_chat_command(command, args)
+            # Process blackjack commands.
+            elif command in blackjack_commands or command in blackjack_admin_commands:
+                if command in blackjack_admin_commands and not has_permission(username):
+                    send_chat_msg(self._sio, "You don't have permission to do that.")
+                    return
                 self._blackjack_processor.process_chat_command(username, command, args)
             else:
-                msg = f'{command} is not a valid command'
-                send_chat_msg(self._sio, msg)
+                send_chat_msg(self._sio, f"{command} is not a valid command")
 
-        @self._sio.on('queue')
-        @self._sio.on('queueWarn')
+        @self._sio.on("queue")
+        @self._sio.on("queueWarn")
         def queue(resp):
-            self._logger.info(f'queue: {resp}')
+            self._logger.info(f"queue: {resp}")
             self._sio_data.queue_err = False
             self._sio_data.queue_resp = resp
 
-        @self._sio.on('queueFail')
+        @self._sio.on("queueFail")
         def queue_err(resp):
             acceptable_errors = [
-                'This item is already on the playlist',
-                'Cannot add age restricted videos. See: https://github.com/calzoneman/sync/wiki/Frequently-Asked-Questions#why-dont-age-restricted-youtube-videos-work',  # noqa: E501
-                'The uploader has made this video non-embeddable',
-                'This video has not been processed yet.',
+                "This item is already on the playlist",
+                "Cannot add age restricted videos. See: https://github.com/calzoneman/sync/wiki/Frequently-Asked-Questions#why-dont-age-restricted-youtube-videos-work",
+                "The uploader has made this video non-embeddable",
+                "This video has not been processed yet.",
             ]
 
-            if resp['msg'] in acceptable_errors:
+            if resp["msg"] in acceptable_errors:
                 self._sio_data.queue_err = False
                 self._sio_data.queue_resp = resp
                 return
 
             self._sio_data.queue_err = True
-            self._logger.info(f'queue err: {resp}')
+            self._logger.info(f"queue err: {resp}")
             try:
-                id = resp['id']
-                send_chat_msg(self._sio, f'Failed to add {id}, retrying in 4 secs.')
-                self._sio.sleep(4)
+                id = resp["id"]
+                send_chat_msg(self._sio, f"Failed to add {id}, retrying in 6 secs.")
+                self._sio.sleep(6)
                 self._sio.emit(
-                    'queue', {'id': id, 'type': 'yt', 'pos': 'end', 'temp': True}
+                    "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
                 )
                 # TODO: This is effectively a recursive call if cytube returns
                 # errors, add a base case to kill the spawned threads and give
@@ -176,26 +200,26 @@ class ChatBot:
             except KeyError:
                 self._logger.info("queue err doesn't contain key 'id'")
 
-        @self._sio.on('changeMedia')
+        @self._sio.on("changeMedia")
         def change_media(resp):
-            self._logger.info(f'change_media: {resp=}')
+            self._logger.info(f"change_media: {resp=}")
             self._sio_data.current_media = resp
 
-        @self._sio.on('setCurrent')
+        @self._sio.on("setCurrent")
         def set_current(resp):
-            self._logger.info(f'set_current: {resp=}')
+            self._logger.info(f"set_current: {resp=}")
             self._sio_data.queue_position = resp
 
         @self._sio.event
         def connect_error(err):
-            self._logger.info(f'Error: {err}')
-            self._logger.info('Socket connection error. Attempting reconnect.')
+            self._logger.info(f"Error: {err}")
+            self._logger.info("Socket connection error. Attempting reconnect.")
             socket_url = self._init_socket()
             self._sio.connect(socket_url)
 
         @self._sio.event
         def disconnect():
-            self._logger.info('Socket disconnected.')
+            self._logger.info("Socket disconnected.")
 
         socket_url = self._init_socket()
         self._sio.connect(socket_url)

@@ -1,5 +1,0 @@
-flask
-Werkzeug
-psycopg
-psycopg-binary
-psycopg-pool

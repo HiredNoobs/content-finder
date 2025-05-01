@@ -1,100 +1,151 @@
 import atexit
+import json
 import logging
 import os
-import typing
 
 import requests
 from bs4 import BeautifulSoup as bs
-from psycopg_pool import ConnectionPool
+
+import redis
 
 
+# TODO:
+# - Move logger out of class
+# - Convert to singleton with static methods
 class DBHandler:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
+        host = os.getenv("REDIS_HOST", "localhost")
+        port = int(os.getenv("REDIS_PORT", 6379))
+        self._redis = redis.Redis(host=host, port=port, db=0, decode_responses=True)
+        atexit.register(self._close_connection)
 
-        conn_info = (
-            'postgres://'
-            f'{os.getenv("POSTGRES_USER")}:{os.getenv("POSTGRES_PASSWORD")}'
-            '@postgres.content-finder:5432/content?connect_timeout=30'
-        )
-        self._pool = ConnectionPool(conn_info)
+    def _close_connection(self) -> None:
+        self._logger.info("Closing Redis connection.")
+        self._redis.close()
 
-        # When the module exits this should force close the pool of conns
-        atexit.register(self._close_pool)
+    def _make_key(self, channel_id: str) -> str:
+        return f"{channel_id}@youtube.channel.id"
 
-    def _execute(self, query: str, params: typing.Tuple = None) -> list | None:
-        """
-        Extremely generic method for executing any single query against the DB.
-        Method will take a connection from the pool, create a cursor, execute
-        the given query - while supplying any params, if a SELECT is given the
-        method will call .fetchall() and return the results, and commit any
-        changes to the DB then return None.
-        """
-        self._logger.info(f'Executing {query} with {params}.')
-        query_type = query.split()[0]
-        result = None
-        with self._pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
-                self._logger.info(f'{cur.statusmessage=}')
-                if query_type == 'SELECT':
-                    result = cur.fetchall()
-                    self._logger.info(f'{result=}')
-            conn.commit()
-        return result
+    def _load_channel_data(self, channel_id: str) -> dict:
+        key = self._make_key(channel_id)
+        data_str = self._redis.get(key)
+        if data_str:
+            try:
+                return json.loads(data_str)
+            except json.JSONDecodeError:
+                self._logger.exception(f"Failed to decode JSON data for key: {key}")
+        return {}
 
-    def _close_pool(self) -> None:
-        self._logger.info('Closing Postgres connnection pool.')
-        self._pool.close()
+    def _save_channel_data(self, channel_id: str, data: dict) -> None:
+        key = self._make_key(channel_id)
+        try:
+            self._redis.set(key, json.dumps(data))
+        except Exception:
+            self._logger.exception(f"Failed to save data for key: {key}")
 
     def update_datetime(self, channel_id: str, new_dt: str) -> None:
-        query = 'UPDATE content SET datetime = %s WHERE channelId = %s'
-        self._execute(query, (new_dt, channel_id))
+        data = self._load_channel_data(channel_id)
+        if not data:
+            self._logger.error(f"No channel found for ID: {channel_id}")
+            return
+        data["datetime"] = new_dt
+        self._save_channel_data(channel_id, data)
+        self._logger.info(f"Updated datetime for channel {channel_id}")
 
-    def get_channels(self, tag: str = None) -> list:
-        if tag:
-            query = 'SELECT * FROM content WHERE %s = ANY(tags)'
-            channels = self._execute(query, (tag,))
-        else:
-            query = 'SELECT * FROM content'
-            channels = self._execute(query)
+    def get_channels(self, tag: str | None = None) -> list:
+        channels = []
+        pattern = "*@youtube.channel.id"
+        # scan_iter instead of keys to be more production friendly
+        for key in self._redis.scan_iter(pattern):
+            data_str = self._redis.get(key)
+            if data_str:
+                try:
+                    data = json.loads(data_str)
+                    if tag:
+                        if (
+                            "tags" in data
+                            and isinstance(data["tags"], list)
+                            and tag in data["tags"]
+                        ):
+                            channels.append(data)
+                    else:
+                        channels.append(data)
+                except json.JSONDecodeError:
+                    self._logger.exception(f"JSON decoding failed for key: {key}")
         return channels
 
     def add_channel(self, channel_id: str, channel_name: str) -> None:
-        channel = f'https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}'
-        resp = requests.get(channel, timeout=60)
-        page = resp.text
-        soup = bs(page, 'lxml')
-        entry = soup.find_all('entry')[0]
-        published = entry.find_all('published')[0].text
+        channel_url = (
+            f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+        )
+        try:
+            resp = requests.get(channel_url, timeout=60)
+            resp.raise_for_status()
+        except requests.RequestException:
+            self._logger.exception(
+                f"Failed to retrieve feed for channel_id: {channel_id}"
+            )
+            return
 
-        query = 'INSERT INTO content(channelId, name, datetime) VALUES (%s,%s,%s)'
-        self._execute(query, (channel_id, channel_name, published))
+        soup = bs(resp.text, "lxml")
+        try:
+            entry = soup.find_all("entry")[0]
+            published = entry.find_all("published")[0].text
+        except (IndexError, AttributeError):
+            self._logger.error(
+                f"Failed to parse published date for channel_id: {channel_id}"
+            )
+            return
 
-    def remove_channel(self, channel_name) -> None:
-        query = 'DELETE FROM content WHERE ctid IN (SELECT ctid FROM content WHERE name = %s LIMIT 1)'
-        self._execute(query, (channel_name,))
+        data = {
+            "channelId": channel_id,
+            "name": channel_name,
+            "datetime": published,
+            "tags": [],
+        }
+        self._save_channel_data(channel_id, data)
+        self._logger.info(f"Added channel {channel_id} with name {channel_name}")
+
+    def remove_channel(self, channel_name: str) -> None:
+        pattern = "*@youtube.channel.id"
+        for key in self._redis.scan_iter(pattern):
+            data_str = self._redis.get(key)
+            if data_str:
+                try:
+                    data = json.loads(data_str)
+                    if data.get("name") == channel_name:
+                        self._redis.delete(key)
+                        self._logger.info(f"Removed channel with name {channel_name}")
+                        return
+                except json.JSONDecodeError:
+                    self._logger.exception(f"JSON decoding failed for key: {key}")
+        self._logger.warning(f"No channel found with name {channel_name}")
 
     def add_tags(self, channel_id: str, new_tags: list) -> None:
-        query = 'SELECT tags FROM content WHERE channelid = %s'
-        tags = self._execute(query, (channel_id,))[0][0]
-        if not tags:
+        data = self._load_channel_data(channel_id)
+        tags = data.get("tags", [])
+        if not isinstance(tags, list):
             tags = []
-        for new_tag in new_tags:
-            if new_tag not in tags:
-                tags.append(new_tag)
-        query = 'UPDATE content SET tags = %s WHERE channelid = %s'
-        self._execute(query, (tags, channel_id))
+        for tag in new_tags:
+            if tag not in tags:
+                tags.append(tag)
+        data["tags"] = tags
+        self._save_channel_data(channel_id, data)
+        self._logger.info(f"Added tags {new_tags} to channel {channel_id}")
 
     def remove_tags(self, channel_id: str, tags_to_remove: list) -> None:
-        query = 'SELECT tags FROM content WHERE channelid = %s'
-        tags = self._execute(query, (channel_id,))[0][0]
-        if not tags:
+        data = self._load_channel_data(channel_id)
+        if not data:
+            self._logger.error(f"No channel found for ID: {channel_id}")
+            return
+        tags = data.get("tags", [])
+        if not isinstance(tags, list):
             tags = []
-        tags = [x for x in tags if x not in tags_to_remove]
-        query = 'UPDATE content SET tags = %s WHERE channelid = %s'
-        self._execute(query, (tags, channel_id))
+        data["tags"] = [tag for tag in tags if tag not in tags_to_remove]
+        self._save_channel_data(channel_id, data)
+        self._logger.info(f"Removed tags {tags_to_remove} from channel {channel_id}")
 
     @property
-    def pool(self) -> ConnectionPool:
-        return self._pool
+    def connection(self) -> redis.Redis:
+        return self._redis

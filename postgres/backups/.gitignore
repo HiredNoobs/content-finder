@@ -1,5 +1,0 @@
-# Ignore all the backup files, keep only the .gitignore
-# Keeps the directory structure alive without the user having to do extra
-# work...
-*
-!.gitignore
