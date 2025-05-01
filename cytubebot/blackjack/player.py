@@ -6,17 +6,14 @@ from cytubebot.blackjack.deck import Deck
 class Player:
     def __init__(self, name: str, balance: int = 100) -> None:
         self.name = name
-        # Initially, a player only has one hand.
         self.hand: List[Dict[str, str]] = []
-        # Once a split occurs, hands will be stored here.
         self.hands: List[List[Dict[str, str]]] = None
-        # Index for the hand in active play (if hands have been split).
+        # Index for the hand in active play (if hands have been split)
         self.active_hand_index: int = 0
         self.balance = balance
         self.bet = 0
-        # A flag indicating if the player's turn is done (all hands have been played).
         self.finished = False
-        self.split_count = 0  # Number of splits performed.
+        self.split_count = 0
 
     def get_active_hand(self) -> List[Dict[str, str]]:
         if self.hands is not None:
@@ -48,7 +45,7 @@ class Player:
         return self.calculate_hand_value(self.get_active_hand())
 
     def can_split(self) -> bool:
-        """A hand can be split if it contains exactly two cards of the same rank."""
+        """Returns a bool for whether the current hand can be split"""
         hand = self.get_active_hand()
         return len(hand) == 2 and hand[0]["rank"] == hand[1]["rank"]
 

@@ -2,14 +2,10 @@ import logging
 import os
 from datetime import datetime, timedelta
 
-import requests
-import socketio
-
 from cytubebot.blackjack.blackjack_bot import BlackjackBot
 from cytubebot.chatbot.chat_processor import ChatProcessor
-from cytubebot.chatbot.sio_data import SIOData
 from cytubebot.common.commands import Commands
-from cytubebot.common.socket_extensions import send_chat_msg
+from cytubebot.common.socket_wrapper import SocketWrapper
 
 REQUIRED_PERMISSION_LEVEL = 3
 
@@ -21,46 +17,15 @@ class ChatBot:
     should be passed to the relevant class.
     """
 
-    def __init__(
-        self, url: str, channel_name: str, username: str, password: str
-    ) -> None:
+    def __init__(self, username: str, password: str) -> None:
         self._logger = logging.getLogger(__name__)
 
-        self.url = url
-        self.channel_name = channel_name
         self.username = username
         self.password = password
 
-        self._sio = socketio.Client()  # For debugging: engineio_logger=True
-        self._sio_data = SIOData()
-        self._chat_processor = ChatProcessor(self._sio, self._sio_data)
-        self._blackjack_processor = BlackjackBot(self._sio)
-
-    def _init_socket(self) -> str:
-        """
-        Finds the socket conn for channel given in .env - this method does NOT
-        connect.
-
-        returns:
-            A str containing the url of the socket server.
-        """
-        socket_conf = f"{self.url}socketconfig/{self.channel_name}.json"
-        resp = requests.get(socket_conf, timeout=60)
-        self._logger.info(f"resp: {resp.status_code} - {resp.reason}")
-        servers = resp.json()
-        socket_url = ""
-
-        for server in servers["servers"]:
-            if server["secure"]:
-                socket_url = server["url"]
-                break
-
-        if not socket_url:
-            raise socketio.exceptions.ConnectionError(
-                "Unable to find a secure socket to connect to"
-            )
-
-        return socket_url
+        self._sio = SocketWrapper("", "")
+        self._chat_processor = ChatProcessor()
+        self._blackjack_processor = BlackjackBot()
 
     def listen(self) -> None:
         """
@@ -71,7 +36,7 @@ class ChatBot:
         def has_permission(
             username: str, required: int = REQUIRED_PERMISSION_LEVEL
         ) -> bool:
-            return self._sio_data.users.get(username, 0) >= required
+            return self._sio.data.users.get(username, 0) >= required
 
         standard_commands = set(Commands.STANDARD_COMMANDS.value.keys())
         admin_commands = set(Commands.ADMIN_COMMANDS.value.keys())
@@ -92,21 +57,21 @@ class ChatBot:
         @self._sio.on("login")
         def login(resp):
             self._logger.info(resp)
-            send_chat_msg(self._sio, "Hello!")
+            self._sio.send_chat_msg("Hello!")
 
         @self._sio.on("userlist")
         def userlist(resp):
             for user in resp:
-                self._sio_data.users[user["name"]] = user["rank"]
+                self._sio.data.users[user["name"]] = user["rank"]
 
         @self._sio.on("addUser")  # User joins channel
         @self._sio.on("setUserRank")
         def user_add(resp):
-            self._sio_data.users[resp["name"]] = resp["rank"]
+            self._sio.data.users[resp["name"]] = resp["rank"]
 
         @self._sio.on("userLeave")
         def user_leave(resp):
-            self._sio_data.users.pop(resp["name"], None)
+            self._sio.data.users.pop(resp["name"], None)
             # TODO: Remove player from blackjack
 
         @self._sio.on("chatMsg")
@@ -144,9 +109,7 @@ class ChatBot:
             if command in standard_commands or command in admin_commands:
                 if command in admin_commands:
                     if not has_permission(username):
-                        send_chat_msg(
-                            self._sio, "You don't have permission to do that."
-                        )
+                        self._sio.send_chat_msg("You don't have permission to do that.")
                         return
                     self._chat_processor.process_chat_command(
                         command, args, allow_force=True
@@ -156,18 +119,18 @@ class ChatBot:
             # Process blackjack commands.
             elif command in blackjack_commands or command in blackjack_admin_commands:
                 if command in blackjack_admin_commands and not has_permission(username):
-                    send_chat_msg(self._sio, "You don't have permission to do that.")
+                    self._sio.send_chat_msg("You don't have permission to do that.")
                     return
                 self._blackjack_processor.process_chat_command(username, command, args)
             else:
-                send_chat_msg(self._sio, f"{command} is not a valid command")
+                self._sio.send_chat_msg(f"{command} is not a valid command")
 
         @self._sio.on("queue")
         @self._sio.on("queueWarn")
         def queue(resp):
             self._logger.info(f"queue: {resp}")
-            self._sio_data.queue_err = False
-            self._sio_data.queue_resp = resp
+            self._sio.data.queue_err = False
+            self._sio.data.queue_resp = resp
 
         @self._sio.on("queueFail")
         def queue_err(resp):
@@ -179,15 +142,15 @@ class ChatBot:
             ]
 
             if resp["msg"] in acceptable_errors:
-                self._sio_data.queue_err = False
-                self._sio_data.queue_resp = resp
+                self._sio.data.queue_err = False
+                self._sio.data.queue_resp = resp
                 return
 
-            self._sio_data.queue_err = True
+            self._sio.data.queue_err = True
             self._logger.info(f"queue err: {resp}")
             try:
                 id = resp["id"]
-                send_chat_msg(self._sio, f"Failed to add {id}, retrying in 6 secs.")
+                self._sio.send_chat_msg(f"Failed to add {id}, retrying in 6 secs.")
                 self._sio.sleep(6)
                 self._sio.emit(
                     "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
@@ -195,7 +158,7 @@ class ChatBot:
                 # TODO: This is effectively a recursive call if cytube returns
                 # errors, add a base case to kill the spawned threads and give
                 # up e.g. self.err_count and max_error = 5
-                while self._sio_data.queue_err:
+                while self._sio.data.queue_err:
                     self._sio.sleep(0.1)
             except KeyError:
                 self._logger.info("queue err doesn't contain key 'id'")
@@ -203,24 +166,25 @@ class ChatBot:
         @self._sio.on("changeMedia")
         def change_media(resp):
             self._logger.info(f"change_media: {resp=}")
-            self._sio_data.current_media = resp
+            self._sio.data.current_media = resp
 
         @self._sio.on("setCurrent")
         def set_current(resp):
             self._logger.info(f"set_current: {resp=}")
-            self._sio_data.queue_position = resp
+            self._sio.data.queue_position = resp
 
         @self._sio.event
         def connect_error(err):
             self._logger.info(f"Error: {err}")
             self._logger.info("Socket connection error. Attempting reconnect.")
-            socket_url = self._init_socket()
+            # Is this fine? Or are we doing something recursive?
+            socket_url = self._sio.init_socket()
             self._sio.connect(socket_url)
 
         @self._sio.event
         def disconnect():
             self._logger.info("Socket disconnected.")
 
-        socket_url = self._init_socket()
+        socket_url = self._sio.init_socket()
         self._sio.connect(socket_url)
         self._sio.wait()

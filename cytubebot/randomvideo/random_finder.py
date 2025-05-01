@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import string
+from typing import Tuple
 
 import requests
 
@@ -10,7 +11,9 @@ class RandomFinder:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
 
-    def find_random(self, size: int = 3, use_dict=False) -> str:
+    def find_random(
+        self, size: int = 3, use_dict=False
+    ) -> Tuple[str | None, str | None]:
         if 0 > size > 10:
             size = 3
 

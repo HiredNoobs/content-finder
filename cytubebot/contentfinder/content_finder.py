@@ -59,7 +59,7 @@ class ContentFinder:
 
         content = sorted(content, key=attrgetter("datetime"))
 
-        return content, len(content)
+        return content
 
     def _is_short(self, title: str, id: str) -> bool:
         """

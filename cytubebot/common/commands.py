@@ -10,7 +10,6 @@ class Commands(Enum):
     ADMIN_COMMANDS = {
         "add": "Add channel to database, use channel username, ID, or URL.",
         "add_tags": "",
-        # 'blackjack': '',
         "content": "",
         "current": "",
         "christmas": "",

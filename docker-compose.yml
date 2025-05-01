@@ -14,11 +14,12 @@ services:
     environment:
       PYTHONUNBUFFERED: 1
       COMMAND_SYMBOLS: "!,$$,/"
-      CYTUBE_URL: https://cytu.be/
+      CYTUBE_URL: https://cytu.be
       CYTUBE_URL_CHANNEL_NAME: ${CYTUBE_URL_CHANNEL_NAME}
       CYTUBE_USERNAME: ${CYTUBE_USERNAME}
       CYTUBE_PASSWORD: ${CYTUBE_PASSWORD}
       CYTUBE_MSG_LIMIT: 320
+      VALID_TAGS: ${VALID_TAGS}
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       LOG_LEVEL: DEBUG

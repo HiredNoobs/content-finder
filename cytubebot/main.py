@@ -2,6 +2,7 @@ import os
 
 from cytubebot.chatbot.chat_bot import ChatBot
 from cytubebot.common.exceptions import MissingEnvVar
+from cytubebot.common.socket_wrapper import SocketWrapper
 
 
 def main() -> None:
@@ -10,10 +11,13 @@ def main() -> None:
     username = os.getenv("CYTUBE_USERNAME")
     password = os.getenv("CYTUBE_PASSWORD")
 
-    if not all([url, channel_name, username, password]):
+    if not url or not channel_name or not username or not password:
         raise MissingEnvVar("One/some of the env variables are missing.")
 
-    bot = ChatBot(url, channel_name, username, password)
+    # Create the singleton
+    SocketWrapper(url, channel_name)
+
+    bot = ChatBot(username, password)
     bot.listen()
 
 

@@ -11,7 +11,7 @@ import redis
 
 # TODO:
 # - Move logger out of class
-# - Convert to singleton with static methods
+# - Convert to singleton
 class DBHandler:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
