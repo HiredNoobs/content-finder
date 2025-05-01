@@ -88,7 +88,7 @@ class ChatBot:
                 seconds=10
             ) or username == os.getenv("CYTUBE_USERNAME"):
                 self._logger.debug(
-                    "Not processing {resp} due to either age or message from bot."
+                    f"Not processing {resp} due to either age or message from bot."
                 )
                 return
 
