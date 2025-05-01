@@ -32,13 +32,21 @@ def push(file):
 def pull():
     """Pull all keys from Redis and save them into a timestamped JSON file."""
     keys = redis_client.keys("*")
+
+    channels = []
+    for key in keys:
+        data = redis_client.get(key)
+        try:
+            channel = json.loads(data)
+            channels.append(channel)
+        except json.JSONDecodeError:
+            print(f"Warning: Could not decode data for key {key}")
+
     current_datetime = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = f"channels-{current_datetime}.json"
 
     with open(output_file, "w") as f:
-        json.dump({"keys": keys}, f, indent=4)
-
-    print(f"Keys have been written to {output_file}")
+        json.dump(channels, f, indent=4)
 
 
 if __name__ == "__main__":
