@@ -1,5 +1,6 @@
 services:
   redis:
+    container_name: content-finder-redis-1
     image: redis:7.4.2
     ports:
       - 6379:6379

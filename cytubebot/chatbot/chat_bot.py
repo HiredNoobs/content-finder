@@ -17,9 +17,10 @@ class ChatBot:
     should be passed to the relevant class.
     """
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, channel_name: str, username: str, password: str) -> None:
         self._logger = logging.getLogger(__name__)
 
+        self.channel_name = channel_name
         self.username = username
         self.password = password
 

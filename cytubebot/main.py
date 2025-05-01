@@ -17,7 +17,7 @@ def main() -> None:
     # Create the singleton
     SocketWrapper(url, channel_name)
 
-    bot = ChatBot(username, password)
+    bot = ChatBot(channel_name, username, password)
     bot.listen()
 
 

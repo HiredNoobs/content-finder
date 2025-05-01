@@ -36,8 +36,8 @@ class SocketWrapper:
                 instance.data = SIOData()
                 cls._instance = instance
 
-                socket_url = instance._init_socket()
-                instance._socketio.connect(socket_url)
+                # socket_url = instance.init_socket()
+                # instance._socketio.connect(socket_url)
         return cls._instance
 
     def init_socket(self) -> str:
@@ -45,7 +45,7 @@ class SocketWrapper:
         Returns:
             A str containing the URL of the socket server.
         """
-        socket_conf = f"{self.url}socketconfig/{self.channel_name}.json"
+        socket_conf = f"{self._url}/socketconfig/{self._channel_name}.json"
         resp = requests.get(socket_conf, timeout=60)
         self._logger.info(f"resp: {resp.status_code} - {resp.reason}")
         servers = resp.json()
@@ -78,4 +78,7 @@ class SocketWrapper:
         Forward attribute access to the underlying SocketIO instance.
         This allows you to call any of SocketIO's methods on the singleton.
         """
-        return getattr(self._socketio, name)
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            return getattr(self._socketio, name)
