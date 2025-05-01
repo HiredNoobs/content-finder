@@ -32,6 +32,7 @@ class DBHandler:
         data_str = self._redis.get(key)
         if data_str:
             try:
+                self._logger.debug(f"Found {key}={data_str}")
                 return json.loads(data_str)
             except json.JSONDecodeError:
                 self._logger.exception(f"Failed to decode JSON data for key: {key}")
@@ -39,6 +40,7 @@ class DBHandler:
 
     def _save_channel_data(self, channel_id: str, data: dict) -> None:
         key = self._make_key(channel_id)
+        self._logger.debug(f"Updating {key} with {data=}")
         try:
             self._redis.set(key, json.dumps(data))
         except Exception:
@@ -49,7 +51,7 @@ class DBHandler:
         if not data:
             self._logger.error(f"No channel found for ID: {channel_id}")
             return
-        data["datetime"] = new_dt
+        data["last_update"] = new_dt
         self._save_channel_data(channel_id, data)
         self._logger.info(f"Updated datetime for channel {channel_id}")
 
@@ -101,7 +103,7 @@ class DBHandler:
         data = {
             "channelId": channel_id,
             "name": channel_name,
-            "datetime": published,
+            "last_update": published,
             "tags": [],
         }
         self._save_channel_data(channel_id, data)

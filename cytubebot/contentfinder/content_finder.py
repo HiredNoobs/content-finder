@@ -17,8 +17,8 @@ class ContentFinder:
     def find_content(self, tag: str | None = None) -> list[namedtuple]:
         """
         returns:
-            A tuple containing the content dict and a count of the amount of
-            new content found. Content dict comes in the form:
+            A list containing a named tuple of new content found.
+            Content tuple comes in the form:
             {
                 'channel_id': (datetime, [video_id_1, video_id_2])
             }
