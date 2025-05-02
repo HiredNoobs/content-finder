@@ -140,13 +140,15 @@ class ChatBot:
 
         @self._sio.on("queueFail")
         def queue_err(resp):
+            logger.debug(f"queue err: {resp}")
+
             if resp["msg"] in ACCEPTABLE_ERRORS:
+                logger.debug(f"Skipping queue err due to being in {ACCEPTABLE_ERRORS=}")
                 self._sio.data.queue_err = False
                 self._sio.data.queue_resp = resp
                 return
 
             self._sio.data.queue_err = True
-            logger.info(f"queue err: {resp}")
             try:
                 id = resp["id"]
                 delay = 1
