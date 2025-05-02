@@ -143,23 +143,23 @@ class ChatBot:
             logger.debug(f"queue err: {resp}")
             logger.debug(f"SIO Data states: {self._sio.data.queue_err=}, {self._sio.data.queue_resp}")
 
-            # prevent multiple queueFails from spawning additional threads
-            if self._sio.data.queue_err:
-                logger.debug("Skipping queue_err as another is already being processed.")
-                return
-
             if resp["msg"] in ACCEPTABLE_ERRORS:
                 logger.debug("Skipping queue err due to being an acceptable error.")
                 self._sio.data.queue_err = False
                 self._sio.data.queue_resp = resp
                 return
 
+            # prevent multiple queueFails from spawning additional threads
+            if self._sio.data.queue_err:
+                logger.debug("Skipping queue_err as another is already being processed.")
+                return
+
             self._sio.data.queue_err = True
             try:
                 id = resp["id"]
                 delay = 4
-                max_delay = 15
-                max_retries = 5
+                max_delay = 10
+                max_retries = 10
                 retry_count = 0
 
                 while self._sio.data.queue_err and retry_count < max_retries:
@@ -175,6 +175,9 @@ class ChatBot:
                 if retry_count >= max_retries:
                     self._sio.send_chat_msg(f"Giving up on {id} after {max_retries} attempts.")
                     logger.warning(f"Max retries reached for {id}")
+
+                    self._sio.data.queue_err = False
+                    self._sio.data.queue_resp = ""
             except KeyError:
                 logger.info("queue err doesn't contain key 'id'")
 
