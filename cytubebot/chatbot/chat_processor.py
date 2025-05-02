@@ -147,15 +147,15 @@ class ChatProcessor:
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
 
-            logger.debug(f"resp: {self._sio.data.queue_resp}, err: {self._sio.data.queue_err}")
+            logger.debug(f"Before loop: resp: {self._sio.data.queue_resp}, err: {self._sio.data.queue_err}")
 
             # Loop while queue_resp is not set i.e. until we get a response
             # and while self._sio.data.queue_err is true i.e. if we're handling
             # an error.
-            while self._sio.data.queue_resp is None and self._sio.data.queue_err:
+            while self._sio.data.queue_resp is None or self._sio.data.queue_err:
                 self._sio.sleep(0.3)
 
-            logger.debug(f"resp: {self._sio.data.queue_resp}, err: {self._sio.data.queue_err}")
+            logger.debug(f"After loop: resp: {self._sio.data.queue_resp}, err: {self._sio.data.queue_err}")
 
             self._db.update_datetime(channel_id, str(new_dt))
 
@@ -176,7 +176,7 @@ class ChatProcessor:
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
 
-            while self._sio.data.queue_resp is None and self._sio.data.queue_err:
+            while self._sio.data.queue_resp is None or self._sio.data.queue_err:
                 self._sio.sleep(0.3)
 
         self._sio.data.queue_resp = None
@@ -201,7 +201,7 @@ class ChatProcessor:
                 {"id": rand_id, "type": "yt", "pos": "end", "temp": True},
             )
 
-            while self._sio.data.queue_resp is None and self._sio.data.queue_err:
+            while self._sio.data.queue_resp is None or self._sio.data.queue_err:
                 self._sio.sleep(0.3)
 
             self._sio.data.queue_resp = None
