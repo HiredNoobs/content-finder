@@ -142,10 +142,11 @@ class ChatProcessor:
                 "queue",
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
-            while not self._sio.data.queue_resp:
-                self._sio.sleep(0.3)
-            self._sio.data.queue_resp = None
 
+            while not self._sio.data.queue_resp and self._sio.data.queue_err:
+                self._sio.sleep(0.3)
+
+            self._sio.data.queue_resp = None
             self._db.update_datetime(channel_id, str(new_dt))
 
         self._sio.send_chat_msg("Finished adding content.")
@@ -162,6 +163,11 @@ class ChatProcessor:
                 "queue",
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
+
+            while not self._sio.data.queue_resp and self._sio.data.queue_err:
+                self._sio.sleep(0.3)
+
+            self._sio.data.queue_resp = None
 
     def _handle_random(self, command, args) -> None:
         rand_id = None
@@ -181,8 +187,10 @@ class ChatProcessor:
                 "queue",
                 {"id": rand_id, "type": "yt", "pos": "end", "temp": True},
             )
-            while not self._sio.data.queue_resp:
+
+            while not self._sio.data.queue_resp and self._sio.data.queue_err:
                 self._sio.sleep(0.3)
+
             self._sio.data.queue_resp = None
             self._sio.send_chat_msg(f"Searched: {search_str}, added: {rand_id}")
         else:
