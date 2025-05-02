@@ -6,7 +6,7 @@ services:
       - 6379:6379
     volumes:
       - redis:/data
-    restart: unless-stopped
+    restart: on-failure
   content-finder:
     container_name: content-finder.bot
     build:
@@ -24,7 +24,7 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       LOG_LEVEL: DEBUG
-    restart: unless-stopped
+    restart: on-failure
 
 volumes:
   redis:
