@@ -15,7 +15,7 @@ class SIOData:
     _users: dict = field(default_factory=dict)
 
     @property
-    def queue_resp(self) -> str:
+    def queue_resp(self) -> str | None:
         return self._queue_resp
 
     @queue_resp.setter
@@ -35,7 +35,7 @@ class SIOData:
         return self._lock
 
     @lock.setter
-    def lock(self, value: str) -> None:
+    def lock(self, value: bool) -> None:
         self._lock = value
 
     @property
