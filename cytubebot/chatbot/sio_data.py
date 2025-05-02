@@ -7,8 +7,8 @@ class SIOData:
     Non socket specific data class to share between classes more easily.
     """
 
-    _queue_resp: str = None
-    _queue_err: bool = False
+    _queue_resp: str | None = None  # Stores the most recent response when content added to queue
+    _queue_err: bool = False  # Stores a bool to reflect if the _queue_resp was an error
     _lock: bool = False
     _current_media: dict = None
     _queue_position: int = -1

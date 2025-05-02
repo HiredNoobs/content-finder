@@ -134,6 +134,8 @@ class ChatProcessor:
         self._sio.send_chat_msg(f"Adding {len(content)} videos.")
 
         for content_tuple in content:
+            self._sio.data.queue_resp = None
+
             channel_id = content_tuple.channel_id
             new_dt = content_tuple.datetime
             video_id = content_tuple.video_id
@@ -145,12 +147,15 @@ class ChatProcessor:
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
 
-            while not self._sio.data.queue_resp and self._sio.data.queue_err:
+            # Loop while queue_resp is not set i.e. until we get a response
+            # and while self._sio.data.queue_err is true i.e. if we're handling
+            # an error.
+            while self._sio.data.queue_resp is None and self._sio.data.queue_err:
                 self._sio.sleep(0.3)
 
-            self._sio.data.queue_resp = None
             self._db.update_datetime(channel_id, str(new_dt))
 
+        self._sio.data.queue_resp = None
         self._sio.send_chat_msg("Finished adding content.")
 
     def _handle_add_christmas_videos(self) -> None:
@@ -161,15 +166,16 @@ class ChatProcessor:
 
         xmas_vids = ["3KvWwJ6sh5s"]
         for video_id in xmas_vids:
+            self._sio.data.queue_resp = None
             self._sio.emit(
                 "queue",
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
 
-            while not self._sio.data.queue_resp and self._sio.data.queue_err:
+            while self._sio.data.queue_resp is None and self._sio.data.queue_err:
                 self._sio.sleep(0.3)
 
-            self._sio.data.queue_resp = None
+        self._sio.data.queue_resp = None
 
     def _handle_random(self, command, args) -> None:
         rand_id = None
@@ -185,12 +191,13 @@ class ChatProcessor:
             rand_id, search_str = self._random_finder.find_random(size)
 
         if rand_id:
+            self._sio.data.queue_resp = None
             self._sio.emit(
                 "queue",
                 {"id": rand_id, "type": "yt", "pos": "end", "temp": True},
             )
 
-            while not self._sio.data.queue_resp and self._sio.data.queue_err:
+            while self._sio.data.queue_resp is None and self._sio.data.queue_err:
                 self._sio.sleep(0.3)
 
             self._sio.data.queue_resp = None

@@ -141,9 +141,15 @@ class ChatBot:
         @self._sio.on("queueFail")
         def queue_err(resp):
             logger.debug(f"queue err: {resp}")
+            logger.debug(f"SIO Data states: {self._sio.data.queue_err=}, {self._sio.data.queue_resp}")
+
+            # prevent multiple queueFails from spawning additional threads
+            if self._sio.data.queue_err:
+                logger.debug("Skipping queue_err as another is already being processed.")
+                return
 
             if resp["msg"] in ACCEPTABLE_ERRORS:
-                logger.debug(f"Skipping queue err due to being in {ACCEPTABLE_ERRORS=}")
+                logger.debug("Skipping queue err due to being an acceptable error.")
                 self._sio.data.queue_err = False
                 self._sio.data.queue_resp = resp
                 return
@@ -151,7 +157,7 @@ class ChatBot:
             self._sio.data.queue_err = True
             try:
                 id = resp["id"]
-                delay = 1
+                delay = 4
                 max_delay = 15
                 max_retries = 5
                 retry_count = 0
