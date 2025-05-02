@@ -162,7 +162,7 @@ class ChatBot:
                     self._sio.emit(
                         "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
                     )
-                    delay = min(delay * 2, max_delay)  # Apply exponential backoff
+                    delay = min(delay * 2, max_delay)
                     retry_count += 1
                     self._sio.sleep(2)  # Give time for a response
 
