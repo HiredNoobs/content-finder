@@ -1,0 +1,11 @@
+[project]
+name = "content-finder"
+version = "2.0.0"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.flake8]
+extend-ignore = ["E203", "E501", "W503"]
+
+[tool.isort]
+profile = "black"

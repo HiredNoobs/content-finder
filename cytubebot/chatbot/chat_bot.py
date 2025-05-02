@@ -1,241 +1,190 @@
-import requests
-import socketio
+import logging
+import os
 from datetime import datetime, timedelta
-from cytubebot.contentfinder.database import DBHandler
-from cytubebot.contentfinder.content_finder import ContentFinder
-from cytubebot.randomvideo.random_finder import RandomFinder
+
+from cytubebot.blackjack.blackjack_bot import BlackjackBot
+from cytubebot.chatbot.chat_processor import ChatProcessor
+from cytubebot.common.commands import Commands
+from cytubebot.common.socket_wrapper import SocketWrapper
+
+REQUIRED_PERMISSION_LEVEL = 3
+logger = logging.getLogger(__name__)
 
 
 class ChatBot:
-    def __init__(self, url, channel_name, username, password) -> None:
-        self.url = url
+    """
+    The ChatBot class is a socketio wrapper that handles **only** the socket
+    side of the chat bot and basic processing, any specific processing
+    should be passed to the relevant class.
+    """
+
+    def __init__(self, channel_name: str, username: str, password: str) -> None:
         self.channel_name = channel_name
         self.username = username
         self.password = password
 
-        self.sio = socketio.Client()  # For debugging: engineio_logger=True
-        self.queue_resp = None
-
-        # To avoid issues with different threads (i.e. main and error thread)
-        # changing queue_resp while another thread is waiting for it to have a
-        # specific value
-        self.queue_err = False
-        self.lock = False
-        self.users = {}
-        self.valid_commands = ['!content', '!random', '!help', '!kill']
-        self.db = DBHandler()
-        self.content_finder = ContentFinder()
-
-        self.random_finder = RandomFinder()
-
-    def _init_socket(self) -> str:
-        """
-        Finds the socket conn for channel given in .env -  this method does NOT
-        connect.
-
-        returns:
-            A str containing the url of the socket server.
-        """
-        socketConfig = f'{self.url}socketconfig/{self.channel_name}.json'
-        resp = requests.get(socketConfig)
-        print(f'resp: {resp.status_code} - {resp.reason}')
-        servers = resp.json()
-        socket_url = ''
-
-        for server in servers['servers']:
-            if server['secure']:
-                socket_url = server['url']
-                break
-
-        if not socket_url:
-            raise socketio.exception.ConnectionError('Unable to find a secure '
-                                                     'socket to connect to')
-
-        return socket_url
+        self._sio = SocketWrapper("", "")
+        self._chat_processor = ChatProcessor()
+        self._blackjack_processor = BlackjackBot()
 
     def listen(self) -> None:
         """
         Main 'loop', connects to the socket server from _init_socket() and
         waits for chat commands.
-
-        Current commands:
-            - !content
-            - !kill
         """
-        @self.sio.event
+
+        def has_permission(
+            username: str, required: int = REQUIRED_PERMISSION_LEVEL
+        ) -> bool:
+            return self._sio.data.users.get(username, 0) >= required
+
+        standard_commands = set(Commands.STANDARD_COMMANDS.value.keys())
+        admin_commands = set(Commands.ADMIN_COMMANDS.value.keys())
+        blackjack_commands = set(Commands.BLACKJACK_COMMANDS.value.keys())
+        blackjack_admin_commands = set(Commands.BLACKJACK_ADMIN_COMMANDS.value.keys())
+        command_symbols = tuple(Commands.COMMAND_SYMBOLS.value)
+
+        @self._sio.event
         def connect():
-            print('Socket connected!')
-            self.sio.emit('joinChannel', {'name': self.channel_name})
+            logger.info("Socket connected!")
+            self._sio.emit("joinChannel", {"name": self.channel_name})
 
-        @self.sio.on('channelOpts')
+        @self._sio.on("channelOpts")
         def channel_opts(resp):
-            print(resp)
-            self.sio.emit('login', {'name': self.username,
-                                    'pw': self.password})
+            logger.info(resp)
+            self._sio.emit("login", {"name": self.username, "pw": self.password})
 
-        @self.sio.on('login')
+        @self._sio.on("login")
         def login(resp):
-            print(resp)
-            self.sio.emit('chatMsg', {'msg': 'Hello!'})
+            logger.info(resp)
+            self._sio.send_chat_msg("Hello!")
 
-        @self.sio.on('userlist')
+        @self._sio.on("userlist")
         def userlist(resp):
             for user in resp:
-                self.users[user['name']] = user['rank']
+                self._sio.data.users[user["name"]] = user["rank"]
 
-        @self.sio.on('addUser')
-        @self.sio.on('setUserRank')
+        @self._sio.on("addUser")  # User joins channel
+        @self._sio.on("setUserRank")
         def user_add(resp):
-            self.users[resp['name']] = resp['rank']
+            self._sio.data.users[resp["name"]] = resp["rank"]
 
-        @self.sio.on('userLeave')
+        @self._sio.on("userLeave")
         def user_leave(resp):
-            self.users.pop(resp['name'], None)
+            self._sio.data.users.pop(resp["name"], None)
+            # TODO: Remove player from blackjack
 
-        @self.sio.on('chatMsg')
+        @self._sio.on("chatMsg")
         def chat(resp):
-            print(resp)
-            chat_ts = datetime.fromtimestamp(resp['time']/1000)
-            delta = datetime.now() - timedelta(seconds=10)
-            command = resp['msg'].split()[0].casefold()
-            try:
-                args = [x.casefold() for x in resp['msg'].split()[1:]]
-            except IndexError:
-                args = None
+            logger.debug(resp)
 
-            # Ignore older messages and messages that aren't valid commands
-            if chat_ts < delta or command not in self.valid_commands:
+            username = resp["username"]
+            raw_message = resp["msg"]
+            chat_ts = datetime.fromtimestamp(resp["time"] / 1000)
+
+            # Only process messages sent within the last 10 seconds from a user other than self.
+            if chat_ts < datetime.now() - timedelta(
+                seconds=10
+            ) or username == os.getenv("CYTUBE_USERNAME"):
+                logger.debug(
+                    f"Not processing {resp} due to either age or message from bot."
+                )
                 return
 
-            if self.users.get(resp['username'], 0) < 3:
-                msg = 'You don\'t have permission to do that.'
-                self.sio.emit('chatMsg', {'msg': msg})
+            parts = raw_message.split()
+            if not parts:
                 return
 
-            if self.lock:
-                msg = 'Currently collecting content, please wait...'
-                self.sio.emit('chatMsg', {'msg': msg})
+            raw_command = parts[0].casefold()
+            # Verify that the message starts with a valid command symbol.
+            if not raw_command.startswith(command_symbols):
                 return
 
-            match command:
-                case '!content':
-                    self.lock = True
-                    con, cur = self.db.init_db()
+            logger.debug(f"Processing {raw_command}")
 
-                    self.sio.emit('chatMsg', {'msg': 'Searching for content...'})
+            command = raw_command[1:]
+            args = parts[1:] if len(parts) > 1 else []
 
-                    self.db.pop_db()
-                    content, count = self.content_finder.find_content()
-
-                    if count == 0:
-                        self.sio.emit('chatMsg', {'msg': 'No content to add.'})
-                        self.lock = False
+            # Process normal / admin chat commands.
+            if command in standard_commands or command in admin_commands:
+                if command in admin_commands:
+                    if not has_permission(username):
+                        self._sio.send_chat_msg("You don't have permission to do that.")
                         return
+                    self._chat_processor.process_chat_command(
+                        command, args, allow_force=True
+                    )
+                else:
+                    self._chat_processor.process_chat_command(command, args)
+            # Process blackjack commands.
+            elif command in blackjack_commands or command in blackjack_admin_commands:
+                if command in blackjack_admin_commands and not has_permission(username):
+                    self._sio.send_chat_msg("You don't have permission to do that.")
+                    return
+                self._blackjack_processor.process_chat_command(username, command, args)
+            else:
+                self._sio.send_chat_msg(f"{command} is not a valid command")
 
-                    self.sio.emit('chatMsg', {'msg': f'Adding {count} videos.'})
-
-                    for key, val in content.items():
-                        new_dt = val[0]
-                        content_list = val[1]
-
-                        for content in content_list:
-                            self.sio.emit('queue', {'id': content, 'type': 'yt',
-                                                    'pos': 'end', 'temp': True})
-                            # Wait for resp
-                            while not self.queue_resp:
-                                self.sio.sleep(0.3)
-                            self.queue_resp = None
-
-                        if new_dt:
-                            query = ('UPDATE content SET datetime = ? WHERE '
-                                    'channelId = ?')
-                            cur.execute(query, (str(new_dt), key,))
-                            con.commit()
-
-                    # Close thread sensitive resources & unlock
-                    cur.close()
-                    con.close()
-                    self.lock = False
-
-                    self.sio.emit('chatMsg', {'msg': 'Finished adding content.'})
-                case '!random':
-                    # Not using any thread sensitive content but need to be
-                    # aware of self.queue_resp/queue_err etc.
-                    self.lock = True
-
-                    try:
-                        size = int(args[0]) if args else 3
-                    except ValueError:
-                        size = 3
-
-                    rand_id = self.random_finder.find_random(size)
-                    if rand_id:
-                        self.sio.emit('queue', {'id': rand_id, 'type': 'yt',
-                                                'pos': 'end', 'temp': True})
-                        while not self.queue_resp:
-                            self.sio.sleep(0.3)
-                        self.queue_resp = None
-
-                        msg = f'Added random vid: {rand_id}'
-                        self.sio.emit('chatMsg', {'msg': msg})
-                    else:
-                        msg = (f'Found no random videos.. Try again. '
-                               'If giving arg over 5, try reducing.')
-                        self.sio.emit('chatMsg', {'msg': msg})
-
-                    self.lock = False
-                case '!help':
-                    self.sio.emit('chatMsg', {'msg': 'TODO: this :)'})
-                case '!kill':
-                    self.lock = True
-                    self.sio.emit('chatMsg', {'msg': 'Bye bye!'})
-                    self.sio.sleep(3)  # temp sol to allow the chat msg to send
-                    self.sio.disconnect()
-                case _:
-                    msg = f'Missing case for command {resp["msg"]}'
-                    self.sio.emit('chatMsg', {'msg': msg})
-
-        @self.sio.on('queue')
-        @self.sio.on('queueWarn')
+        @self._sio.on("queue")
+        @self._sio.on("queueWarn")
         def queue(resp):
-            print(f'queue: {resp}')
-            self.queue_err = False
-            self.queue_resp = resp
+            logger.info(f"queue: {resp}")
+            self._sio.data.queue_err = False
+            self._sio.data.queue_resp = resp
 
-        @self.sio.on('queueFail')
+        @self._sio.on("queueFail")
         def queue_err(resp):
-            if resp['msg'] == 'This item is already on the playlist':
-                self.queue_err = False
-                self.queue_resp = resp
+            acceptable_errors = [
+                "This item is already on the playlist",
+                "Cannot add age restricted videos. See: https://github.com/calzoneman/sync/wiki/Frequently-Asked-Questions#why-dont-age-restricted-youtube-videos-work",
+                "The uploader has made this video non-embeddable",
+                "This video has not been processed yet.",
+            ]
+
+            if resp["msg"] in acceptable_errors:
+                self._sio.data.queue_err = False
+                self._sio.data.queue_resp = resp
                 return
 
-            self.queue_err = True
-            print(f'queue err: {resp}')
+            self._sio.data.queue_err = True
+            logger.info(f"queue err: {resp}")
             try:
-                id = resp['id']
-                self.sio.emit('chatMsg', {'msg': f'Failed to add {id}, '
-                                          'retrying in 2 secs.'})
-                self.sio.sleep(2)
-                self.sio.emit('queue', {'id': id, 'type': 'yt', 'pos': 'end',
-                                        'temp': True})
+                id = resp["id"]
+                self._sio.send_chat_msg(f"Failed to add {id}, retrying in 6 secs.")
+                self._sio.sleep(6)
+                self._sio.emit(
+                    "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
+                )
                 # TODO: This is effectively a recursive call if cytube returns
                 # errors, add a base case to kill the spawned threads and give
                 # up e.g. self.err_count and max_error = 5
-                while self.queue_err:
-                    self.sio.sleep(0.1)
+                while self._sio.data.queue_err:
+                    self._sio.sleep(0.1)
             except KeyError:
-                print('queue err doesn\'t contain key "id"')
+                logger.info("queue err doesn't contain key 'id'")
 
-        @self.sio.event
-        def connect_error():
-            print('Socket connection error. Attempting reconnect.')
-            socket_url = self._init_socket()
-            self.sio.connect(socket_url)
+        @self._sio.on("changeMedia")
+        def change_media(resp):
+            logger.info(f"change_media: {resp=}")
+            self._sio.data.current_media = resp
 
-        @self.sio.event
+        @self._sio.on("setCurrent")
+        def set_current(resp):
+            logger.info(f"set_current: {resp=}")
+            self._sio.data.queue_position = resp
+
+        @self._sio.event
+        def connect_error(err):
+            logger.info(f"Error: {err}")
+            logger.info("Socket connection error. Attempting reconnect.")
+            # Is this fine? Or are we doing something recursive?
+            socket_url = self._sio.init_socket()
+            self._sio.connect(socket_url)
+
+        @self._sio.event
         def disconnect():
-            print('Socket disconnected.')
+            logger.info("Socket disconnected.")
 
-        socket_url = self._init_socket()
-        self.sio.connect(socket_url)
-        self.sio.wait()
+        socket_url = self._sio.init_socket()
+        self._sio.connect(socket_url)
+        self._sio.wait()

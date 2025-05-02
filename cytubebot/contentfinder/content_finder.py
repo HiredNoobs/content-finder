@@ -1,66 +1,83 @@
-import requests
+import logging
+from collections import namedtuple
 from datetime import datetime
+from operator import attrgetter
+
+import requests
 from bs4 import BeautifulSoup as bs
+
 from cytubebot.contentfinder.database import DBHandler
+
+logger = logging.getLogger(__name__)
 
 
 class ContentFinder:
     def __init__(self) -> None:
-        self.db = DBHandler()
+        self._db = DBHandler()
 
-    def find_content(self) -> tuple[dict, int]:
+    def find_content(self, tag: str | None = None) -> list[namedtuple]:
         """
         returns:
-            A tuple containing the content dict and a count of the amount of
-            new content found. Content dict comes in the form:
+            A list containing a named tuple of new content found.
+            Content tuple comes in the form:
             {
                 'channel_id': (datetime, [video_id_1, video_id_2])
             }
         """
-        con, cur = self.db.init_db()
-        content = {}
-        count = 0
+        ContentDetails = namedtuple("ContentDetails", "channel_id datetime video_id")
 
-        cur.execute('SELECT * FROM content')
-        for row in cur:
-            channel_id = row[0]
-            name = row[1]
-            dt = datetime.fromisoformat(row[2])
-            print(f'Getting content for: {name}')
+        content = []
+        channels = self._db.get_channels(tag)
 
-            channel = ('https://www.youtube.com/feeds/videos.xml?channel_id='
-                       f'{channel_id}')
-            resp = requests.get(channel)
+        for row in channels:
+            logger.debug(f"{row=}")
+            channel_id = row["channel_id"]
+            name = row["channel_name"]
+            dt = datetime.fromisoformat(row["last_update"])
+            logger.info(f"Getting content for: {name}")
+
+            channel = (
+                f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+            )
+            resp = requests.get(channel, timeout=60)
             page = resp.text
-            soup = bs(page, 'lxml')
+            soup = bs(page, "lxml")
 
-            video_ids = []
-            new_dt = None
-            for item in soup.find_all('entry'):
-                if '#shorts' in item.find_all('title')[0].text.casefold():
-                    print('Skipping #short.')
-                    continue
-
-                published = item.find_all('published')[0].text
+            for item in soup.find_all("entry"):
+                published = item.find_all("published")[0].text
                 published = datetime.fromisoformat(published)
 
                 if published < dt or published == dt:
-                    print(f'No more new videos for {name}')
+                    logger.info(f"No more new videos for {name}")
                     break
 
-                video_id = item.find_all('yt:videoid')[0].text
+                title = item.find_all("title")[0].text.casefold()
+                video_id = item.find_all("yt:videoid")[0].text
 
-                # Insert in reverse order so vids are in the order they were
-                video_ids.insert(0, video_id)
+                if not self._is_short(title, video_id):
+                    c = ContentDetails(channel_id, published, video_id)
+                    content.append(c)
 
-                # Set new datetime for DB
-                if not new_dt:
-                    new_dt = published
+        content = sorted(content, key=attrgetter("datetime"))
 
-            count += len(video_ids)
-            content[channel_id] = (new_dt, video_ids)
+        return content
 
-        cur.close()
-        con.close()
+    def _is_short(self, title: str, id: str) -> bool:
+        """
+        Returns True if video id is a YT Shorts video.
+        """
+        if "#shorts" in title:
+            return True
 
-        return content, count
+        shorts_url = f"https://www.youtube.com/shorts/{id}"
+        resp = requests.head(
+            shorts_url, cookies={"CONSENT": "YES+1"}, timeout=60, allow_redirects=False
+        )
+        if resp.status_code == 303 or resp.status_code == 302:
+            return False
+        # Assume any 2XX successfully reached a shorts page
+        elif 200 <= resp.status_code <= 299:
+            return True
+        else:
+            logger.info(f"Received {resp.status_code=} from {shorts_url}")
+            return True

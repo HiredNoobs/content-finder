@@ -1,82 +1,151 @@
-import sqlite3
+import atexit
+import json
+import logging
 import os
+
 import requests
-import configparser
 from bs4 import BeautifulSoup as bs
-from cytubebot.common.exceptions import MissingConfVar
+
+import redis
+
+logger = logging.getLogger(__name__)
 
 
 class DBHandler:
     def __init__(self) -> None:
-        self.last_updated = None
+        host = os.getenv("REDIS_HOST", "localhost")
+        port = int(os.getenv("REDIS_PORT", 6379))
+        self._redis = redis.Redis(host=host, port=port, db=0, decode_responses=True)
+        atexit.register(self._close_connection)
 
-        # Doing here to avoid having to frequently read from .ini
-        config = configparser.ConfigParser()
-        conf_file = f'{os.path.dirname(os.path.realpath(__file__))}/conf.ini'
-        config.read(conf_file)
-        self.db_file = config.get('DEFAULT', 'DB_FILE')
+    def _close_connection(self) -> None:
+        logger.info("Closing Redis connection.")
+        self._redis.close()
 
-        if not self.db_file:
-            raise MissingConfVar(f'Missing var "DB_FILE" from {conf_file}')
+    def _make_key(self, channel_id: str) -> str:
+        return f"{channel_id}@youtube.channel.id"
 
-    def init_db(self) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
-        """
-        Opens and returns an open DB conn and cursor.
+    def _load_channel_data(self, channel_id: str) -> dict:
+        key = self._make_key(channel_id)
+        data_str = self._redis.get(key)
+        if data_str:
+            try:
+                logger.debug(f"Found {key}={data_str}")
+                return json.loads(data_str)
+            except json.JSONDecodeError:
+                logger.exception(f"Failed to decode JSON data for key: {key}")
+        return {}
 
-        returns:
-            A tuple containing a connection to the DB and a cursor.
-        """
-        con = sqlite3.connect(self.db_file)
-        cur = con.cursor()
-        cur.execute('CREATE TABLE IF NOT EXISTS content (channelId text '
-                    'primary key, name text, datetime text)')
-        con.commit()
+    def _save_channel_data(self, channel_id: str, data: dict) -> None:
+        key = self._make_key(channel_id)
+        logger.debug(f"Updating {key} with {data=}")
+        try:
+            self._redis.set(key, json.dumps(data))
+        except Exception:
+            logger.exception(f"Failed to save data for key: {key}")
 
-        return con, cur
+    def update_datetime(self, channel_id: str, new_dt: str) -> None:
+        data = self._load_channel_data(channel_id)
+        if not data:
+            logger.error(f"No channel found for ID: {channel_id}")
+            return
+        data["last_update"] = new_dt
+        self._save_channel_data(channel_id, data)
+        logger.info(f"Updated datetime for channel {channel_id}")
 
-    def pop_db(self) -> None:
-        """
-        Reads from channel-ids.txt and inserts into DB. Inserts date of most
-        recent video.
+    def get_channels(self, tag: str | None = None) -> list:
+        channels = []
+        pattern = "*@youtube.channel.id"
+        # scan_iter instead of keys to be more production friendly
+        for key in self._redis.scan_iter(pattern):
+            data_str = self._redis.get(key)
+            if data_str:
+                try:
+                    data = json.loads(data_str)
+                    if tag:
+                        if (
+                            "tags" in data
+                            and isinstance(data["tags"], list)
+                            and tag in data["tags"]
+                        ):
+                            channels.append(data)
+                    else:
+                        channels.append(data)
+                except json.JSONDecodeError:
+                    logger.exception(f"JSON decoding failed for key: {key}")
+        return channels
 
-        channels-ids.txt must be in the form:
-        # CHANNEL_NAME
-        CHANNEL_ID
-        # CHANNEL_NAME
-        CHANNEL_NAME
-        """
-        con, cur = self.init_db()
-
-        updated = os.path.getmtime(os.path.dirname(os.path.realpath(__file__)))
-
-        if self.last_updated is not None and self.last_updated == updated:
-            print('File not updated, nothing to add to DB.')
+    def add_channel(self, channel_id: str, channel_name: str) -> None:
+        channel_url = (
+            f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+        )
+        try:
+            resp = requests.get(channel_url, timeout=60)
+            resp.raise_for_status()
+        except requests.RequestException:
+            logger.exception(f"Failed to retrieve feed for channel_id: {channel_id}")
             return
 
-        with open('channel-ids.txt') as file:
-            for line in file:
-                name = line[1:].strip()
-                # this will raise StopIteration if you channel-ids doesn't have
-                # even lines i.e. if someone doesn't read the readme
-                channel_id = next(file).strip()
+        soup = bs(resp.text, "lxml")
+        try:
+            entry = soup.find_all("entry")[0]
+            published = entry.find_all("published")[0].text
+        except (IndexError, AttributeError):
+            logger.error(f"Failed to parse published date for channel_id: {channel_id}")
+            return
 
-                # Get most recent published date for datetime in DB
-                channel = ('https://www.youtube.com/feeds/videos.xml?'
-                           f'channel_id={channel_id}')
-                resp = requests.get(channel)
-                page = resp.text
-                soup = bs(page, 'lxml')
-                entry = soup.find_all('entry')[0]
-                published = entry.find_all('published')[0].text
+        data = {
+            "channelId": channel_id,
+            "name": channel_name,
+            "last_update": published,
+            "tags": [],
+        }
+        self._save_channel_data(channel_id, data)
+        logger.info(f"Added channel {channel_id} with name {channel_name}")
 
+    def remove_channel(self, channel_name: str) -> None:
+        pattern = "*@youtube.channel.id"
+        for key in self._redis.scan_iter(pattern):
+            data_str = self._redis.get(key)
+            if data_str:
                 try:
-                    query = ('INSERT INTO content(channelId, name, datetime) '
-                             'VALUES(?,?,?)')
-                    cur.execute(query, (channel_id, name, published,))
-                    con.commit()
-                except sqlite3.IntegrityError:
-                    print(f'{name} already in db, skipping.')
+                    data = json.loads(data_str)
+                    if data.get("name") == channel_name:
+                        self._redis.delete(key)
+                        logger.info(f"Removed channel with name {channel_name}")
+                        return
+                except json.JSONDecodeError:
+                    logger.exception(f"JSON decoding failed for key: {key}")
+        logger.warning(f"No channel found with name {channel_name}")
 
-        self.last_updated = updated
-        cur.close()
-        con.close()
+    def add_tags(self, channel_id: str, new_tags: list) -> None:
+        data = self._load_channel_data(channel_id)
+        tags = data.get("tags", [])
+        if not isinstance(tags, list):
+            tags = []
+        for tag in new_tags:
+            if tag not in tags:
+                tags.append(tag)
+        data["tags"] = tags
+        self._save_channel_data(channel_id, data)
+        logger.info(f"Added tags {new_tags} to channel {channel_id}")
+
+    def remove_tags(self, channel_id: str, tags_to_remove: list) -> None:
+        data = self._load_channel_data(channel_id)
+        if not data:
+            logger.error(f"No channel found for ID: {channel_id}")
+            return
+        tags = data.get("tags", [])
+        if not isinstance(tags, list):
+            tags = []
+        data["tags"] = [tag for tag in tags if tag not in tags_to_remove]
+        self._save_channel_data(channel_id, data)
+        logger.info(f"Removed tags {tags_to_remove} from channel {channel_id}")
+
+    def shutdown(self) -> None:
+        logger.debug("Shutting down DB remoted...")
+        self._redis.shutdown()
+
+    @property
+    def connection(self) -> redis.Redis:
+        return self._redis
