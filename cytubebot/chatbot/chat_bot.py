@@ -170,16 +170,21 @@ class ChatBot:
                     )
                     delay = min(delay * 2, max_delay)
                     retry_count += 1
-                    self._sio.sleep(2)  # Give time for a response
+                    self._sio.sleep(1)  # Give time for a response
 
                 if retry_count >= max_retries:
                     self._sio.send_chat_msg(f"Giving up on {id} after {max_retries} attempts.")
                     logger.warning(f"Max retries reached for {id}")
 
-                    self._sio.data.queue_err = False
-                    self._sio.data.queue_resp = ""
+                self._sio.data.queue_err = False
+                self._sio.data.queue_resp = ""
+
+                self._sio.sleep(1)  # Give time for loops to break
             except KeyError:
                 logger.info("queue err doesn't contain key 'id'")
+            finally:
+                self._sio.data.queue_err = False
+                self._sio.data.queue_resp = None
 
         @self._sio.on("changeMedia")
         def change_media(resp):
