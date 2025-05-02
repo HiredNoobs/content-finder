@@ -138,6 +138,8 @@ class ChatProcessor:
             new_dt = content_tuple.datetime
             video_id = content_tuple.video_id
 
+            logger.debug(f"Attempting to add {video_id} for {channel_id}")
+
             self._sio.emit(
                 "queue",
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
