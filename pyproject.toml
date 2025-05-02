@@ -1,6 +1,6 @@
 [project]
 name = "content-finder"
-version = "0.0.1"
+version = "2.0.0"
 readme = "README.md"
 requires-python = ">=3.11"
 

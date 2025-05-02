@@ -1,7 +1,7 @@
 ARG PYTHON_IMAGE=python:3.11-slim-bullseye
 
 #################################################
-# Build Stage: Create virtualenv and install dependencies
+# Create virtualenv and install dependencies
 #################################################
 FROM ${PYTHON_IMAGE} AS build-stage
 
@@ -22,7 +22,7 @@ RUN python -m venv /app/venv && \
 COPY ./cytubebot/ /app/cytubebot/
 
 #################################################
-# Production Stage
+# Build deployable container
 #################################################
 FROM ${PYTHON_IMAGE} AS prod-stage
 
