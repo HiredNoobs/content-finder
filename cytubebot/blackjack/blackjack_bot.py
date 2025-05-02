@@ -4,17 +4,18 @@ from typing import List
 from cytubebot.blackjack.blackjack import BlackjackGame
 from cytubebot.common.socket_wrapper import SocketWrapper
 
+logger = logging.getLogger(__name__)
+
 
 class BlackjackBot:
     def __init__(self) -> None:
         self._sio = SocketWrapper("", "")
         self.blackjack = BlackjackGame()
-        self._logger = logging.getLogger(__name__)
 
     def process_chat_command(
         self, username: str, command: str, args: List[str]
     ) -> None:
-        self._logger.debug(f"Processing blackjack command {command=}, {args=}")
+        logger.debug(f"Processing blackjack command {command=}, {args=}")
         match command:
             case "init_blackjack":
                 self._handle_init_blackjack()
@@ -68,7 +69,7 @@ class BlackjackBot:
 
     def _handle_start_blackjack(self) -> None:
         if self.blackjack.state != "joining":
-            self._logger.debug(
+            logger.debug(
                 f"{self.blackjack.state} not one of joining, game not starting."
             )
             return

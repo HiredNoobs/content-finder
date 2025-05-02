@@ -15,6 +15,7 @@ from cytubebot.contentfinder.database import DBHandler
 from cytubebot.randomvideo.random_finder import RandomFinder
 
 VALID_TAGS: List = os.environ.get("VALID_TAGS", "").split()
+logger = logging.getLogger(__name__)
 
 
 # TODO:
@@ -25,8 +26,6 @@ VALID_TAGS: List = os.environ.get("VALID_TAGS", "").split()
 # random logic can move out to RandomFinder() etc.
 class ChatProcessor:
     def __init__(self) -> None:
-        self._logger = logging.getLogger(__name__)
-
         self._sio = SocketWrapper("", "")
         self._db = DBHandler()
         self._random_finder = RandomFinder()
@@ -41,7 +40,7 @@ class ChatProcessor:
         try:
             self._process_command(command, args)
         except Exception as err:
-            self._logger.exception(f"Error while processing command {command}: {err}")
+            logger.exception(f"Error while processing command {command}: {err}")
             self._sio.send_chat_msg(f"Error processing command: {err}")
         finally:
             self._sio.data.lock = False
@@ -93,10 +92,10 @@ class ChatProcessor:
             else:
                 curr["description"] = "Description not available"
 
-            self._logger.info("Current media: %s", curr)
+            logger.info("Current media: %s", curr)
             self._sio.send_chat_msg(f"{curr}")
         except Exception as err:
-            self._logger.exception(f"Error handling 'current' command: {err}")
+            logger.exception(f"Error handling 'current' command: {err}")
             self._sio.send_chat_msg(f"Error retrieving current media: {err}")
 
     def _handle_tags(self, command: str, args: list) -> None:
@@ -210,7 +209,7 @@ class ChatProcessor:
         if not args:
             return
 
-        self._logger.info(f"{args=}")
+        logger.info(f"{args=}")
 
         channel_name = "".join(args)
         channel_name = self._cleanse_yt_crap(channel_name)
@@ -224,7 +223,7 @@ class ChatProcessor:
             results = re.search('.*"browse_id","value":"(.*?)"', yt_initial_data.text)
             channel_id = results.group(1)
             msg = f"Found channel ID: {channel_id} for {channel_name}, adding to DB."
-            self._logger.info(msg)
+            logger.info(msg)
             self._sio.send_chat_msg(msg)
         except AttributeError:
             try:
@@ -242,10 +241,10 @@ class ChatProcessor:
                 msg = (
                     f"Found channel ID: {channel_id} for {channel_name}, adding to DB."
                 )
-                self._logger.info(msg)
+                logger.info(msg)
                 self._sio.send_chat_msg(msg)
             except AttributeError:
-                self._logger.info(f"Failed to find channel_id for {channel_name}.")
+                logger.info(f"Failed to find channel_id for {channel_name}.")
                 try:
                     channel_id = str(channel_name)
                     channel = f"https://www.youtube.com/channel/{channel_id}"
@@ -263,11 +262,11 @@ class ChatProcessor:
                     )
                     channel_name = results.group(1)
                     msg = f"Found channel name: {channel_name} for {channel_id}, adding to DB."
-                    self._logger.info(msg)
+                    logger.info(msg)
                     self._sio.send_chat_msg(msg)
                 except AttributeError:
                     msg = f"Couldn't find channel: {channel}"
-                    self._logger.error(msg)
+                    logger.error(msg)
                     self._sio.send_chat_msg(msg)
                     return
 
@@ -312,7 +311,7 @@ class ChatProcessor:
             self._sio.send_chat_msg("Bye bye!")
             self._sio.sleep(3)  # Allows time for the chat message to be sent
         except Exception as err:
-            self._logger.exception(f"Error during kill command: {err}")
+            logger.exception(f"Error during kill command: {err}")
         finally:
             self._db.shutdown()
             self._sio.disconnect()

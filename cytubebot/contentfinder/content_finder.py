@@ -8,10 +8,11 @@ from bs4 import BeautifulSoup as bs
 
 from cytubebot.contentfinder.database import DBHandler
 
+logger = logging.getLogger(__name__)
+
 
 class ContentFinder:
     def __init__(self) -> None:
-        self._logger = logging.getLogger(__name__)
         self._db = DBHandler()
 
     def find_content(self, tag: str | None = None) -> list[namedtuple]:
@@ -29,11 +30,11 @@ class ContentFinder:
         channels = self._db.get_channels(tag)
 
         for row in channels:
-            self._logger.debug(f"{row=}")
+            logger.debug(f"{row=}")
             channel_id = row["channel_id"]
             name = row["channel_name"]
             dt = datetime.fromisoformat(row["last_update"])
-            self._logger.info(f"Getting content for: {name}")
+            logger.info(f"Getting content for: {name}")
 
             channel = (
                 f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
@@ -47,7 +48,7 @@ class ContentFinder:
                 published = datetime.fromisoformat(published)
 
                 if published < dt or published == dt:
-                    self._logger.info(f"No more new videos for {name}")
+                    logger.info(f"No more new videos for {name}")
                     break
 
                 title = item.find_all("title")[0].text.casefold()
@@ -78,5 +79,5 @@ class ContentFinder:
         elif 200 <= resp.status_code <= 299:
             return True
         else:
-            self._logger.info(f"Received {resp.status_code=} from {shorts_url}")
+            logger.info(f"Received {resp.status_code=} from {shorts_url}")
             return True

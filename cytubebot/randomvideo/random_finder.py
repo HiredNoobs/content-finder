@@ -6,11 +6,10 @@ from typing import Tuple
 
 import requests
 
+logger = logging.getLogger(__name__)
+
 
 class RandomFinder:
-    def __init__(self) -> None:
-        self._logger = logging.getLogger(__name__)
-
     def find_random(
         self, size: int = 3, use_dict=False
     ) -> Tuple[str | None, str | None]:
@@ -25,7 +24,7 @@ class RandomFinder:
         else:
             rand_str = self._rand_str(size)
 
-        self._logger.info(f"Finding random with {rand_str}")
+        logger.info(f"Finding random with {rand_str}")
         url = f"https://www.youtube.com/results?search_query={rand_str}"
         resp = requests.get(url, timeout=60)
 

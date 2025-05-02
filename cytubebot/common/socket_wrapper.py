@@ -9,6 +9,7 @@ import socketio
 from cytubebot.chatbot.sio_data import SIOData
 
 MSG_LIMIT = int(os.environ.get("CYTUBE_MSG_LIMIT", "80"))
+logger = logging.getLogger(__name__)
 
 
 class SocketWrapper:
@@ -23,21 +24,16 @@ class SocketWrapper:
     data: SIOData
 
     def __new__(cls, url: str, channel_name: str):
-        with cls._lock:
-            if cls._instance is None:
+        if cls._instance is None:
+            with cls._lock:
                 instance = super().__new__(cls)
-
                 instance._url = url
                 instance._channel_name = channel_name
-                instance._logger = logging.getLogger(__name__)
 
                 # For debugging: engineio_logger=True
                 instance._socketio = socketio.Client()
                 instance.data = SIOData()
                 cls._instance = instance
-
-                # socket_url = instance.init_socket()
-                # instance._socketio.connect(socket_url)
         return cls._instance
 
     def init_socket(self) -> str:
@@ -47,7 +43,7 @@ class SocketWrapper:
         """
         socket_conf = f"{self._url}/socketconfig/{self._channel_name}.json"
         resp = requests.get(socket_conf, timeout=60)
-        self._logger.info(f"resp: {resp.status_code} - {resp.reason}")
+        logger.info(f"resp: {resp.status_code} - {resp.reason}")
         servers = resp.json()
         socket_url = ""
 

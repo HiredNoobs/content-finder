@@ -8,6 +8,7 @@ from cytubebot.common.commands import Commands
 from cytubebot.common.socket_wrapper import SocketWrapper
 
 REQUIRED_PERMISSION_LEVEL = 3
+logger = logging.getLogger(__name__)
 
 
 class ChatBot:
@@ -18,8 +19,6 @@ class ChatBot:
     """
 
     def __init__(self, channel_name: str, username: str, password: str) -> None:
-        self._logger = logging.getLogger(__name__)
-
         self.channel_name = channel_name
         self.username = username
         self.password = password
@@ -47,17 +46,17 @@ class ChatBot:
 
         @self._sio.event
         def connect():
-            self._logger.info("Socket connected!")
+            logger.info("Socket connected!")
             self._sio.emit("joinChannel", {"name": self.channel_name})
 
         @self._sio.on("channelOpts")
         def channel_opts(resp):
-            self._logger.info(resp)
+            logger.info(resp)
             self._sio.emit("login", {"name": self.username, "pw": self.password})
 
         @self._sio.on("login")
         def login(resp):
-            self._logger.info(resp)
+            logger.info(resp)
             self._sio.send_chat_msg("Hello!")
 
         @self._sio.on("userlist")
@@ -77,7 +76,7 @@ class ChatBot:
 
         @self._sio.on("chatMsg")
         def chat(resp):
-            self._logger.debug(resp)
+            logger.debug(resp)
 
             username = resp["username"]
             raw_message = resp["msg"]
@@ -87,7 +86,7 @@ class ChatBot:
             if chat_ts < datetime.now() - timedelta(
                 seconds=10
             ) or username == os.getenv("CYTUBE_USERNAME"):
-                self._logger.debug(
+                logger.debug(
                     f"Not processing {resp} due to either age or message from bot."
                 )
                 return
@@ -101,7 +100,7 @@ class ChatBot:
             if not raw_command.startswith(command_symbols):
                 return
 
-            self._logger.debug(f"Processing {raw_command}")
+            logger.debug(f"Processing {raw_command}")
 
             command = raw_command[1:]
             args = parts[1:] if len(parts) > 1 else []
@@ -129,7 +128,7 @@ class ChatBot:
         @self._sio.on("queue")
         @self._sio.on("queueWarn")
         def queue(resp):
-            self._logger.info(f"queue: {resp}")
+            logger.info(f"queue: {resp}")
             self._sio.data.queue_err = False
             self._sio.data.queue_resp = resp
 
@@ -148,7 +147,7 @@ class ChatBot:
                 return
 
             self._sio.data.queue_err = True
-            self._logger.info(f"queue err: {resp}")
+            logger.info(f"queue err: {resp}")
             try:
                 id = resp["id"]
                 self._sio.send_chat_msg(f"Failed to add {id}, retrying in 6 secs.")
@@ -162,29 +161,29 @@ class ChatBot:
                 while self._sio.data.queue_err:
                     self._sio.sleep(0.1)
             except KeyError:
-                self._logger.info("queue err doesn't contain key 'id'")
+                logger.info("queue err doesn't contain key 'id'")
 
         @self._sio.on("changeMedia")
         def change_media(resp):
-            self._logger.info(f"change_media: {resp=}")
+            logger.info(f"change_media: {resp=}")
             self._sio.data.current_media = resp
 
         @self._sio.on("setCurrent")
         def set_current(resp):
-            self._logger.info(f"set_current: {resp=}")
+            logger.info(f"set_current: {resp=}")
             self._sio.data.queue_position = resp
 
         @self._sio.event
         def connect_error(err):
-            self._logger.info(f"Error: {err}")
-            self._logger.info("Socket connection error. Attempting reconnect.")
+            logger.info(f"Error: {err}")
+            logger.info("Socket connection error. Attempting reconnect.")
             # Is this fine? Or are we doing something recursive?
             socket_url = self._sio.init_socket()
             self._sio.connect(socket_url)
 
         @self._sio.event
         def disconnect():
-            self._logger.info("Socket disconnected.")
+            logger.info("Socket disconnected.")
 
         socket_url = self._sio.init_socket()
         self._sio.connect(socket_url)
