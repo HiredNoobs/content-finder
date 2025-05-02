@@ -148,6 +148,10 @@ class DBHandler:
         self._save_channel_data(channel_id, data)
         self._logger.info(f"Removed tags {tags_to_remove} from channel {channel_id}")
 
+    def shutdown(self) -> None:
+        self._logger.debug("Shutting down DB remoted...")
+        self._redis.shutdown()
+
     @property
     def connection(self) -> redis.Redis:
         return self._redis

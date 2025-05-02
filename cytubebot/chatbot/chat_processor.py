@@ -314,4 +314,5 @@ class ChatProcessor:
         except Exception as err:
             self._logger.exception(f"Error during kill command: {err}")
         finally:
+            self._db.shutdown()
             self._sio.disconnect()
