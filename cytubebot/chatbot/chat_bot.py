@@ -150,16 +150,24 @@ class ChatBot:
             logger.info(f"queue err: {resp}")
             try:
                 id = resp["id"]
-                self._sio.send_chat_msg(f"Failed to add {id}, retrying in 6 secs.")
-                self._sio.sleep(6)
-                self._sio.emit(
-                    "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
-                )
-                # TODO: This is effectively a recursive call if cytube returns
-                # errors, add a base case to kill the spawned threads and give
-                # up e.g. self.err_count and max_error = 5
-                while self._sio.data.queue_err:
-                    self._sio.sleep(0.1)
+                delay = 1
+                max_delay = 15
+                max_retries = 5
+                retry_count = 0
+
+                while self._sio.data.queue_err and retry_count < max_retries:
+                    self._sio.send_chat_msg(f"Failed to add {id}, retrying in {delay} secs.")
+                    self._sio.sleep(delay)
+                    self._sio.emit(
+                        "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
+                    )
+                    delay = min(delay * 2, max_delay)  # Apply exponential backoff
+                    retry_count += 1
+                    self._sio.sleep(2)  # Give time for a response
+
+                if retry_count >= max_retries:
+                    self._sio.send_chat_msg(f"Giving up on {id} after {max_retries} attempts.")
+                    logger.warning(f"Max retries reached for {id}")
             except KeyError:
                 logger.info("queue err doesn't contain key 'id'")
 
