@@ -62,7 +62,7 @@ class ChatBot:
         @self._sio.on("userlist")
         def userlist(resp):
             for user in resp:
-                self._sio.data.add_or_update_user(resp["name"], resp["rank"])
+                self._sio.data.add_or_update_user(user["name"], user["rank"])
 
         @self._sio.on("addUser")  # User joins channel
         @self._sio.on("setUserRank")
