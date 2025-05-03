@@ -159,7 +159,7 @@ class ChatBot:
 
                 if not self._sio.data.can_retry():
                     elapsed = (
-                        datetime.datetime.now() - self._sio.data.last_retry
+                        datetime.now() - self._sio.data.last_retry
                     ).total_seconds()
                     remaining_delay = max(0, self._sio.data.current_backoff - elapsed)
                     self._sio.send_chat_msg(
