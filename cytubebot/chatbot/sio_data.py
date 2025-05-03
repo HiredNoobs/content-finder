@@ -111,6 +111,11 @@ class SIOData:
         """
         Reset the current backoff delay to its initial value and clear the last retry timestamp.
         """
+        if self._last_retry is not None:
+            # If the latest retry was recent then we won't reset
+            elapsed = (datetime.datetime.now() - self._last_retry).total_seconds()
+            if elapsed < 10:
+                return
         self._current_backoff = 4
         self._last_retry = None
 
