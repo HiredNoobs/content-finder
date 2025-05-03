@@ -161,7 +161,7 @@ class ChatBot:
                     logger.debug(
                         "Retry not allowed yet, waiting for backoff period to end."
                     )
-                    self._sio.sleep(0.1)
+                    self._sio.sleep(0.5)
 
                 delay = self._sio.data.current_backoff
                 self._sio.send_chat_msg(
