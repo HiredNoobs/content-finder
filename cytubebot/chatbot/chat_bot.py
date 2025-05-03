@@ -62,16 +62,16 @@ class ChatBot:
         @self._sio.on("userlist")
         def userlist(resp):
             for user in resp:
-                self._sio.data.users[user["name"]] = user["rank"]
+                self._sio.data.add_or_update_user(resp["name"], resp["rank"])
 
         @self._sio.on("addUser")  # User joins channel
         @self._sio.on("setUserRank")
         def user_add(resp):
-            self._sio.data.users[resp["name"]] = resp["rank"]
+            self._sio.data.add_or_update_user(resp["name"], resp["rank"])
 
         @self._sio.on("userLeave")
         def user_leave(resp):
-            self._sio.data.users.pop(resp["name"], None)
+            self._sio.data.remove_user(resp["name"])
             # TODO: Remove player from blackjack
 
         @self._sio.on("chatMsg")
@@ -131,6 +131,7 @@ class ChatBot:
             logger.info(f"queue: {resp}")
             self._sio.data.queue_err = False
             self._sio.data.queue_resp = resp
+            self._sio.data.reset_backoff()
 
         @self._sio.on("queueFail")
         def queue_err(resp):
@@ -144,24 +145,35 @@ class ChatBot:
             if resp["msg"] in acceptable_errors:
                 self._sio.data.queue_err = False
                 self._sio.data.queue_resp = resp
+                self._sio.data.reset_backoff()
                 return
 
             self._sio.data.queue_err = True
             logger.info(f"queue err: {resp}")
+
             try:
-                id = resp["id"]
-                self._sio.send_chat_msg(f"Failed to add {id}, retrying in 6 secs.")
-                self._sio.sleep(6)
-                self._sio.emit(
-                    "queue", {"id": id, "type": "yt", "pos": "end", "temp": True}
-                )
-                # TODO: This is effectively a recursive call if cytube returns
-                # errors, add a base case to kill the spawned threads and give
-                # up e.g. self.err_count and max_error = 5
-                while self._sio.data.queue_err:
+                video_id = resp["id"]
+
+                while not self._sio.data.can_retry():
+                    logger.debug(
+                        "Retry not allowed yet, waiting for backoff period to end."
+                    )
                     self._sio.sleep(0.1)
+
+                delay = self._sio.data.current_backoff
+                self._sio.send_chat_msg(
+                    f"Failed to add {video_id}, retrying in {delay} seconds."
+                )
+
+                self._sio.sleep(delay)
+
+                self._sio.emit(
+                    "queue", {"id": video_id, "type": "yt", "pos": "end", "temp": True}
+                )
+
+                self._sio.data.increase_backoff()
             except KeyError:
-                logger.info("queue err doesn't contain key 'id'")
+                logger.info("queue err response doesn't contain key 'id'")
 
         @self._sio.on("changeMedia")
         def change_media(resp):
