@@ -14,7 +14,7 @@ class SIOData:
 
     _queue_resp: str | None = None
     _queue_err: bool = False
-    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOF", 2))
+    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
     _backoff_factor: int = 2
     _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 10))
     _last_retry: datetime.datetime | None = None
@@ -112,7 +112,7 @@ class SIOData:
             if elapsed < 10:
                 logger.debug("Last retry was too soon, not resetting backoff.")
                 return
-        self._current_backoff = 4
+        self._current_backoff = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
         self._last_retry = None
         logger.debug(f"Backoff reset to {self._current_backoff}")
 
