@@ -157,18 +157,15 @@ class ChatBot:
             try:
                 video_id = resp["id"]
 
-                while not self._sio.data.can_retry():
-                    logger.debug(
-                        "Retry not allowed yet, waiting for backoff period to end."
+                if not self._sio.data.can_retry():
+                    elapsed = (
+                        datetime.datetime.now() - self._sio.data.last_retry
+                    ).total_seconds()
+                    remaining_delay = max(0, self._sio.data.current_backoff - elapsed)
+                    self._sio.send_chat_msg(
+                        f"Failed to add {video_id}, retrying in {remaining_delay:.1f} seconds."
                     )
-                    self._sio.sleep(0.5)
-
-                delay = self._sio.data.current_backoff
-                self._sio.send_chat_msg(
-                    f"Failed to add {video_id}, retrying in {delay} seconds."
-                )
-
-                self._sio.sleep(delay)
+                    self._sio.sleep(remaining_delay)
 
                 self._sio.emit(
                     "queue", {"id": video_id, "type": "yt", "pos": "end", "temp": True}
