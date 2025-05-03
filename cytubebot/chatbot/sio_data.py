@@ -1,5 +1,8 @@
 import datetime
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -87,16 +90,6 @@ class SIOData:
         """Return the timestamp of the last retry attempt."""
         return self._last_retry
 
-    @property
-    def next_retry_time(self) -> datetime.datetime | None:
-        """
-        Calculate the next allowed retry time based on the last retry
-        time and the current backoff.
-        """
-        if self._last_retry is None:
-            return None
-        return self._last_retry + datetime.timedelta(seconds=self._current_backoff)
-
     def can_retry(self) -> bool:
         """
         Check if sufficient time has passed since the last retry based on the current backoff delay.
@@ -111,13 +104,16 @@ class SIOData:
         """
         Reset the current backoff delay to its initial value and clear the last retry timestamp.
         """
+        logger.debug("Attempting to reset backoff...")
         if self._last_retry is not None:
             # If the latest retry was recent then we won't reset
             elapsed = (datetime.datetime.now() - self._last_retry).total_seconds()
             if elapsed < 10:
+                logger.debug("Last retry was too soon, not resetting backoff.")
                 return
         self._current_backoff = 4
         self._last_retry = None
+        logger.debug(f"Backoff reset to {self._current_backoff}")
 
     def increase_backoff(self) -> None:
         """
@@ -128,6 +124,7 @@ class SIOData:
         self._current_backoff = min(
             self._current_backoff * self._backoff_factor, self._max_backoff
         )
+        logger.debug(f"Current backoff increased to {self._current_backoff}")
 
     def add_or_update_user(self, user_id: str, user_info: dict) -> None:
         """
