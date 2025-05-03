@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,9 @@ class SIOData:
 
     _queue_resp: str | None = None
     _queue_err: bool = False
-    _current_backoff: int = 2
+    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOF", 2))
     _backoff_factor: int = 2
-    _max_backoff: int = 30
+    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 10))
     _last_retry: datetime.datetime | None = None
     _lock: bool = False
     _current_media: dict | None = None
