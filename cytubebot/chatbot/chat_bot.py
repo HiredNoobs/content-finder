@@ -143,6 +143,9 @@ class ChatBot:
             ]
 
             if resp["msg"] in acceptable_errors:
+                logger.debug(
+                    f"Skipping {resp['msg']} due to being an acceptable error."
+                )
                 self._sio.data.queue_err = False
                 self._sio.data.queue_resp = resp
                 self._sio.data.reset_backoff()

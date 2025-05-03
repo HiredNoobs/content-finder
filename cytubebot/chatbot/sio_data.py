@@ -10,7 +10,7 @@ class SIOData:
 
     _queue_resp: str | None = None
     _queue_err: bool = False
-    _current_backoff: int = 4
+    _current_backoff: int = 2
     _backoff_factor: int = 2
     _max_backoff: int = 30
     _last_retry: datetime.datetime | None = None
