@@ -138,14 +138,7 @@ class ChatProcessor:
             new_dt = content_tuple.datetime
             video_id = content_tuple.video_id
 
-            self._sio.emit(
-                "queue",
-                {"id": video_id, "type": "yt", "pos": "end", "temp": True},
-            )
-            while self._sio.data.queue_resp is None or self._sio.data.queue_err:
-                self._sio.sleep(0.3)
-            self._sio.data.queue_resp = None
-
+            self._sio.add_video_to_queue(video_id)
             self._db.update_datetime(channel_id, str(new_dt))
 
         self._sio.send_chat_msg("Finished adding content.")
@@ -156,12 +149,15 @@ class ChatProcessor:
             self._sio.send_chat_msg("It's not Christmas :(")
             return
 
-        xmas_vids = ["3KvWwJ6sh5s"]
+        xmas_vids = [
+            "3KvWwJ6sh5s",
+            "4JDjkUswzvQ",
+            "vmrMuwcpKkY",
+            "rYUMmIBWm",
+            "Wy1lK-MDZJU",
+        ]
         for video_id in xmas_vids:
-            self._sio.emit(
-                "queue",
-                {"id": video_id, "type": "yt", "pos": "end", "temp": True},
-            )
+            self._sio.add_video_to_queue(video_id)
 
     def _handle_random(self, command, args) -> None:
         rand_id = None
@@ -177,13 +173,7 @@ class ChatProcessor:
             rand_id, search_str = self._random_finder.find_random(size)
 
         if rand_id:
-            self._sio.emit(
-                "queue",
-                {"id": rand_id, "type": "yt", "pos": "end", "temp": True},
-            )
-            while not self._sio.data.queue_resp:
-                self._sio.sleep(0.3)
-            self._sio.data.queue_resp = None
+            self._sio.add_video_to_queue(rand_id)
             self._sio.send_chat_msg(f"Searched: {search_str}, added: {rand_id}")
         else:
             msg = "Found no random videos.. Try again. If giving arg over 5, try reducing."
