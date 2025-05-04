@@ -5,7 +5,7 @@ from operator import itemgetter
 import requests
 from bs4 import BeautifulSoup as bs
 
-from cytubebot.contentfinder.database import DBHandler
+from cytubebot.content_searchers.database import DBHandler
 
 logger = logging.getLogger(__name__)
 

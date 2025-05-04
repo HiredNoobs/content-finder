@@ -10,9 +10,9 @@ from bs4 import BeautifulSoup as bs
 from cytubebot.common.commands import Commands
 from cytubebot.common.exceptions import InvalidTagError
 from cytubebot.common.socket_wrapper import SocketWrapper
-from cytubebot.contentfinder.content_finder import ContentFinder
-from cytubebot.contentfinder.database import DBHandler
-from cytubebot.randomvideo.random_finder import RandomFinder
+from cytubebot.content_searchers.content_finder import ContentFinder
+from cytubebot.content_searchers.database import DBHandler
+from cytubebot.content_searchers.random_finder import RandomFinder
 
 VALID_TAGS: List = os.environ.get("VALID_TAGS", "").split()
 logger = logging.getLogger(__name__)
