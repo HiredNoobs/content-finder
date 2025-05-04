@@ -30,7 +30,7 @@ jobs:
       - name: Install project dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt pytest pytest-cov mypy flake8
+          pip install -r requirements.txt pytest pytest-cov mypy flake8 Flake8-pyproject
 
       - name: Run tests with pytest and generate coverage report
         env:
