@@ -1,0 +1,40 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: python:3.11-slim-bullseye
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install project dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with pytest and generate coverage report
+        run: |
+          pip install pytest pytest-cov
+          pytest --cov=cytubebot --cov-report=html tests/
+
+      - name: Run mypy on cytubebot
+        run: |
+          pip install mypy
+          mypy --install-types --non-interactive cytubebot
+
+      - name: Run flake8 on cytubebot
+        run: |
+          pip install flake8
+          flake8 cytubebot
