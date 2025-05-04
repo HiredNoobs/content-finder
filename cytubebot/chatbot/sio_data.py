@@ -109,8 +109,11 @@ class SIOData:
         if self._last_retry is not None:
             # If the latest retry was recent then we won't reset
             elapsed = (datetime.datetime.now() - self._last_retry).total_seconds()
+            logger.debug(f"{elapsed} seconds since {self._last_retry=}")
             if elapsed < 10:
-                logger.debug("Last retry was too soon, not resetting backoff.")
+                logger.debug(
+                    f"Last retry was too soon ({elapsed} seconds ago), not resetting backoff."
+                )
                 return
         self._current_backoff = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
         self._last_retry = None
