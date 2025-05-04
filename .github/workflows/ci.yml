@@ -37,6 +37,9 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: python3 -m pytest --cov=cytubebot --cov-report=html --cov-fail-under=20
 
+      - name: Ensure mypy cache directory exists
+        run: mkdir -p .mypy_cache/
+
       - name: Run mypy
         run: python3 -m mypy --install-types --non-interactive --cache-dir=.mypy_cache/ cytubebot
 
