@@ -41,7 +41,7 @@ class DatabaseWrapper:
     def _load_channel_data(self, channel_id: str) -> dict:
         key = self._make_key(channel_id)
         data_str = self._redis.get(key)
-        if data_str:
+        if data_str and isinstance(data_str, str)::
             try:
                 logger.debug(f"Found {key}={data_str}")
                 return json.loads(data_str)
