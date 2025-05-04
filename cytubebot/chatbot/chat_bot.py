@@ -8,6 +8,12 @@ from cytubebot.common.commands import Commands
 from cytubebot.common.socket_wrapper import SocketWrapper
 
 REQUIRED_PERMISSION_LEVEL = 3
+ACCEPTABLE_ERRORS = [
+    "This item is already on the playlist",
+    "Cannot add age restricted videos. See: https://github.com/calzoneman/sync/wiki/Frequently-Asked-Questions#why-dont-age-restricted-youtube-videos-work",
+    "The uploader has made this video non-embeddable",
+    "This video has not been processed yet.",
+]
 logger = logging.getLogger(__name__)
 
 
@@ -135,14 +141,7 @@ class ChatBot:
 
         @self._sio.on("queueFail")
         def queue_err(resp):
-            acceptable_errors = [
-                "This item is already on the playlist",
-                "Cannot add age restricted videos. See: https://github.com/calzoneman/sync/wiki/Frequently-Asked-Questions#why-dont-age-restricted-youtube-videos-work",
-                "The uploader has made this video non-embeddable",
-                "This video has not been processed yet.",
-            ]
-
-            if resp["msg"] in acceptable_errors:
+            if resp["msg"] in ACCEPTABLE_ERRORS:
                 logger.debug(
                     f"Skipping '{resp['msg']}' due to being an acceptable error for {resp['id']}."
                 )
