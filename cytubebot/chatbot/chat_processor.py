@@ -74,16 +74,18 @@ class ChatProcessor:
             self._sio.emit("playerReady")
             self._sio.sleep(1)
             curr = self._sio.data.current_media
-            video_id = curr.get("id")
-            if not video_id:
+
+            if curr is None:
                 raise ValueError("No video id found in current media")
+
+            video_id = curr["id"]
             url = f"https://www.youtube.com/watch?v={video_id}"
             resp = requests.get(url, timeout=60)
             resp.raise_for_status()
 
             soup = bs(resp.text, "lxml")
             script = soup.find("script", string=re.compile("ytInitialPlayerResponse"))
-            if not script:
+            if script is None:
                 raise ValueError("ytInitialPlayerResponse not found in page source.")
 
             match_obj = re.search('.*"description":{"simpleText":"(.*?)"', script.text)
