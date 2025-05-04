@@ -141,6 +141,8 @@ class ChatBot:
 
         @self._sio.on("queueFail")
         def queue_err(resp):
+            logger.debug(f"queue err: {resp}")
+
             if resp["msg"] in ACCEPTABLE_ERRORS:
                 logger.debug(
                     f"Skipping '{resp['msg']}' due to being an acceptable error for {resp['id']}."
@@ -151,21 +153,17 @@ class ChatBot:
                 return
 
             self._sio.data.queue_err = True
-            logger.info(f"queue err: {resp}")
+            delay = self._sio.data.last_retry
 
             try:
                 video_id = resp["id"]
 
                 if not self._sio.data.can_retry():
-                    elapsed = (
-                        datetime.now() - self._sio.data.last_retry
-                    ).total_seconds()
-                    remaining_delay = max(0, self._sio.data.current_backoff - elapsed)
                     self._sio.send_chat_msg(
-                        f"Failed to add {video_id}, retrying in {remaining_delay:.0f} seconds."
+                        f"Failed to add {video_id}, retrying in {delay} seconds."
                     )
+                    self._sio.sleep(delay)
                     self._sio.data.increase_backoff()
-                    self._sio.sleep(remaining_delay)
 
                 self._sio.add_video_to_queue(video_id, wait=False)
             except KeyError:
