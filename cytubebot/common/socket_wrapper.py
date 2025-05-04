@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import threading
@@ -82,8 +83,18 @@ class SocketWrapper:
         if not wait:
             return
 
+        logger.debug(
+            f"Starting to wait for content be successfully added. Starting values: {self.data.queue_resp=} and {self.data.queue_err=}."
+            f"Starting time: {datetime.datetime.now()}"
+        )
+
         while self.data.queue_resp is None or self.data.queue_err:
             self._socketio.sleep(0.3)
+
+        logger.debug(
+            f"Finished waiting for content to be added. Final values: {self.data.queue_resp=} and {self.data.queue_err=}."
+            f"Finish time: {datetime.datetime.now()}"
+        )
 
         self.data.queue_resp = None
 
