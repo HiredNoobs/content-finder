@@ -61,17 +61,13 @@ class BlackjackBot:
             if not args:
                 self._sio.self._sio.send_chat_msg("Please specify a bet amount.")
                 return
-            self.blackjack.place_bet(
-                username, args[0], lambda msg: self._sio.self._sio.send_chat_msg(msg)
-            )
+            self.blackjack.place_bet(username, args[0])
         else:
             self._sio.self._sio.send_chat_msg("Betting not allowed at this time.")
 
     def _handle_start_blackjack(self) -> None:
         if self.blackjack.state != "joining":
-            logger.debug(
-                f"{self.blackjack.state} not one of joining, game not starting."
-            )
+            logger.debug(f"{self.blackjack.state=} not joining, game not starting.")
             return
 
         if any(player.bet == 0 for player in self.blackjack.players.values()):
@@ -164,4 +160,4 @@ class BlackjackBot:
         self._sio.send_chat_msg(
             f"Dealer's hand: {self.blackjack.dealer_hand} (Value: {dealer_value})",
         )
-        self.blackjack.resolve_round(lambda msg: self._sio.self._sio.send_chat_msg(msg))
+        self.blackjack.resolve_round()

@@ -25,13 +25,13 @@ class ChatBot:
     """
 
     def __init__(self, channel_name: str, username: str, password: str) -> None:
-        self.channel_name = channel_name
-        self.username = username
-        self.password = password
+        self._channel_name = channel_name
+        self._username = username
+        self._password = password
 
         self._sio = SocketWrapper("", "")
         self._chat_processor = ChatProcessor()
-        self._blackjack_processor = BlackjackBot()
+        self._blackjack_bot = BlackjackBot()
 
     def listen(self) -> None:
         """
@@ -53,12 +53,12 @@ class ChatBot:
         @self._sio.event
         def connect():
             logger.info("Socket connected!")
-            self._sio.emit("joinChannel", {"name": self.channel_name})
+            self._sio.emit("joinChannel", {"name": self._channel_name})
 
         @self._sio.on("channelOpts")
         def channel_opts(resp):
             logger.info(resp)
-            self._sio.emit("login", {"name": self.username, "pw": self.password})
+            self._sio.emit("login", {"name": self._username, "pw": self._password})
 
         @self._sio.on("login")
         def login(resp):
@@ -78,7 +78,7 @@ class ChatBot:
         @self._sio.on("userLeave")
         def user_leave(resp):
             self._sio.data.remove_user(resp["name"])
-            # TODO: Remove player from blackjack
+            self._blackjack_bot.blackjack.remove_player(resp["name"])
 
         @self._sio.on("chatMsg")
         def chat(resp):
@@ -127,7 +127,7 @@ class ChatBot:
                 if command in blackjack_admin_commands and not has_permission(username):
                     self._sio.send_chat_msg("You don't have permission to do that.")
                     return
-                self._blackjack_processor.process_chat_command(username, command, args)
+                self._blackjack_bot.process_chat_command(username, command, args)
             else:
                 self._sio.send_chat_msg(f"{command} is not a valid command")
 
@@ -166,9 +166,7 @@ class ChatBot:
                     )
                     self._sio.sleep(remaining_delay)
 
-                self._sio.emit(
-                    "queue", {"id": video_id, "type": "yt", "pos": "end", "temp": True}
-                )
+                self._sio.add_video_to_queue(video_id, wait=False)
 
                 self._sio.data.increase_backoff()
             except KeyError:
