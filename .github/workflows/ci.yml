@@ -19,22 +19,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install project dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt pytest pytest-cov mypy flake8
 
       - name: Run tests with pytest and generate coverage report
-        run: |
-          pip install pytest pytest-cov
-          pytest --cov=cytubebot --cov-report=html
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest --cov=cytubebot --cov-report=html --cov-fail-under=80
 
-      - name: Run mypy on cytubebot
-        run: |
-          pip install mypy
-          mypy --install-types --non-interactive cytubebot
+      - name: Run mypy
+        run: mypy --install-types --non-interactive cytubebot tests
 
-      - name: Run flake8 on cytubebot
-        run: |
-          pip install flake8
-          flake8 cytubebot
+      - name: Run flake8
+        run: flake8 cytubebot tests
