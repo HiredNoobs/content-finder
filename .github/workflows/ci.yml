@@ -38,7 +38,7 @@ jobs:
         run: python3 -m pytest --cov=cytubebot --cov-report=html --cov-fail-under=20
 
       - name: Run mypy
-        run: python3 -m mypy --install-types --non-interactive --cache-dir=.mypy_cache/
+        run: python3 -m mypy --install-types --non-interactive --cache-dir=.mypy_cache/ cytubebot
 
       - name: Run flake8
         run: flake8 cytubebot tests
