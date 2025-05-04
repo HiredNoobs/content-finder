@@ -41,7 +41,7 @@ class DatabaseWrapper:
     def _load_channel_data(self, channel_id: str) -> dict:
         key = self._make_key(channel_id)
         data_str = self._redis.get(key)
-        if data_str:
+        if data_str and isinstance(data_str, str):
             try:
                 logger.debug(f"Found {key}={data_str}")
                 return json.loads(data_str)
@@ -72,7 +72,7 @@ class DatabaseWrapper:
         # scan_iter instead of keys to be more production friendly
         for key in self._redis.scan_iter(pattern):
             data_str = self._redis.get(key)
-            if data_str:
+            if data_str and isinstance(data_str, str):
                 try:
                     data = json.loads(data_str)
                     if tag:
@@ -120,7 +120,7 @@ class DatabaseWrapper:
         pattern = "*@youtube.channel.id"
         for key in self._redis.scan_iter(pattern):
             data_str = self._redis.get(key)
-            if data_str:
+            if data_str and isinstance(data_str, str):
                 try:
                     data = json.loads(data_str)
                     if data.get("name") == channel_name:

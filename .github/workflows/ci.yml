@@ -1,0 +1,47 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: python:3.11-slim-bullseye
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install project dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt pytest pytest-cov mypy flake8 Flake8-pyproject
+
+      - name: Run tests with pytest and generate coverage report
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 -m pytest --cov=cytubebot --cov-report=html --cov-fail-under=20
+
+      - name: Ensure mypy cache directory exists
+        run: mkdir -p .mypy_cache/
+
+      - name: Run mypy
+        run: python3 -m mypy --install-types --non-interactive --cache-dir=.mypy_cache/ cytubebot
+
+      - name: Run flake8
+        run: flake8 cytubebot tests

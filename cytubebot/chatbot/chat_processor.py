@@ -209,61 +209,59 @@ class ChatProcessor:
         channel_name = "".join(args)
         channel_name = self._cleanse_yt_crap(channel_name)
 
-        try:
-            channel = f"https://www.youtube.com/@{channel_name}"
-            resp = requests.get(channel, cookies={"CONSENT": "YES+1"}, timeout=60)
-            page = resp.text
-            soup = bs(page, "lxml")
-            yt_initial_data = soup.find("script", string=re.compile("ytInitialData"))
-            results = re.search('.*"browse_id","value":"(.*?)"', yt_initial_data.text)
-            channel_id = results.group(1)
-            msg = f"Found channel ID: {channel_id} for {channel_name}, adding to DB."
-            logger.info(msg)
-            self._sio.send_chat_msg(msg)
-        except AttributeError:
+        # Common request settings.
+        cookies = {"CONSENT": "YES+1"}
+        timeout = 60
+
+        def fetch_data(url: str, pattern: str) -> str | None:
             try:
-                channel = f"https://www.youtube.com/c/{channel_name}"
-                resp = requests.get(channel, cookies={"CONSENT": "YES+1"}, timeout=60)
-                page = resp.text
-                soup = bs(page, "lxml")
-                yt_initial_data = soup.find(
-                    "script", string=re.compile("ytInitialData")
-                )
-                results = re.search(
-                    '.*"browse_id","value":"(.*?)"', yt_initial_data.text
-                )
-                channel_id = results.group(1) if results else "No channel found"
+                resp = requests.get(url, cookies=cookies, timeout=timeout)
+                soup = bs(resp.text, "lxml")
+                script_tag = soup.find("script", string=re.compile("ytInitialData"))
+                if script_tag:
+                    match = re.search(pattern, script_tag.text)
+                    if match:
+                        return match.group(1)
+            except Exception:
+                pass  # Silently ignore errors per URL attempt.
+            return None
+
+        channel_id: str | None = ""
+        candidate_urls: List[str] = [
+            f"https://www.youtube.com/@{channel_name}",
+            f"https://www.youtube.com/c/{channel_name}",
+        ]
+        id_pattern = r'.*"browse_id","value":"(.*?)"'
+        for url in candidate_urls:
+            channel_id = fetch_data(url, id_pattern)
+            if channel_id:
                 msg = (
                     f"Found channel ID: {channel_id} for {channel_name}, adding to DB."
                 )
                 logger.info(msg)
                 self._sio.send_chat_msg(msg)
-            except AttributeError:
-                logger.info(f"Failed to find channel_id for {channel_name}.")
-                try:
-                    channel_id = str(channel_name)
-                    channel = f"https://www.youtube.com/channel/{channel_id}"
-                    resp = requests.get(
-                        channel, cookies={"CONSENT": "YES+1"}, timeout=60
-                    )
-                    page = resp.text
-                    soup = bs(page, "lxml")
-                    yt_initial_data = soup.find(
-                        "script", string=re.compile("ytInitialData")
-                    )
-                    results = re.search(
-                        '.*"channelMetadataRenderer":{"title":"(.*?)"',
-                        yt_initial_data.text,
-                    )
-                    channel_name = results.group(1)
-                    msg = f"Found channel name: {channel_name} for {channel_id}, adding to DB."
-                    logger.info(msg)
-                    self._sio.send_chat_msg(msg)
-                except AttributeError:
-                    msg = f"Couldn't find channel: {channel}"
-                    logger.error(msg)
-                    self._sio.send_chat_msg(msg)
-                    return
+                break
+
+        # If no channel ID was found, try the fallback URL.
+        if channel_id is None:
+            logger.info(
+                f"Failed to find channel_id for {channel_name}. Trying fallback URL."
+            )
+
+            channel_id = channel_name
+            fallback_url = f"https://www.youtube.com/channel/{channel_id}"
+            name_pattern = r'.*"channelMetadataRenderer":{"title":"(.*?)"'
+            display_name = fetch_data(fallback_url, name_pattern)
+            if display_name:
+                channel_name = display_name
+                msg = f"Found channel name: {channel_name} for {channel_id}, adding to DB."
+                logger.info(msg)
+                self._sio.send_chat_msg(msg)
+            else:
+                msg = f"Couldn't find channel: {fallback_url}"
+                logger.error(msg)
+                self._sio.send_chat_msg(msg)
+                return
 
         self._db.add_channel(channel_id, channel_name)
 

@@ -5,7 +5,7 @@ import threading
 from textwrap import wrap
 
 import requests
-import socketio
+import socketio  # type: ignore
 
 from cytubebot.chatbot.sio_data import SIOData
 
