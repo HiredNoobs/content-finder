@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from cytubebot.blackjack.deck import Deck
 
@@ -7,7 +7,7 @@ class Player:
     def __init__(self, name: str, balance: int = 100) -> None:
         self.name = name
         self.hand: List[Dict[str, str]] = []
-        self.hands: List[List[Dict[str, str]]] = None
+        self.hands: List[List[Dict[str, str]]] | None = None
         # Index for the hand in active play (if hands have been split)
         self.active_hand_index: int = 0
         self.balance = balance
