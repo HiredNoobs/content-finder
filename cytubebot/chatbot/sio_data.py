@@ -16,7 +16,7 @@ class SIOData:
     _queue_err: bool = False
     _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
     _backoff_factor: int = 2
-    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 12))
+    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 15))
     _last_retry: datetime.datetime | None = None
     _lock: bool = False
     _current_media: dict | None = None

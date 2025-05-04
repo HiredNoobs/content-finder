@@ -163,7 +163,7 @@ class ChatBot:
                     ).total_seconds()
                     remaining_delay = max(0, self._sio.data.current_backoff - elapsed)
                     self._sio.send_chat_msg(
-                        f"Failed to add {video_id}, retrying in {remaining_delay:.1f} seconds."
+                        f"Failed to add {video_id}, retrying in {remaining_delay:.0f} seconds."
                     )
                     self._sio.sleep(remaining_delay)
 
