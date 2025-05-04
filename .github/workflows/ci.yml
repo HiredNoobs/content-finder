@@ -35,10 +35,10 @@ jobs:
       - name: Run tests with pytest and generate coverage report
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest --cov=cytubebot --cov-report=html --cov-fail-under=20
+        run: python3 -m pytest --cov=cytubebot --cov-report=html --cov-fail-under=20
 
       - name: Run mypy
-        run: mypy --install-types --non-interactive --cache-dir=.mypy_cache/ cytubebot tests
+        run: python3 -m mypy --install-types --non-interactive --cache-dir=.mypy_cache/
 
       - name: Run flake8
         run: flake8 cytubebot tests
