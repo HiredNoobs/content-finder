@@ -137,6 +137,8 @@ class ChatProcessor:
         self._sio.send_chat_msg(f"Adding {len(content)} videos.")
 
         for video in content:
+            logger.debug(f"Processing {video}")
+
             channel_id = video["channel_id"]
             new_dt = video["datetime"]
             video_id = video["video_id"]

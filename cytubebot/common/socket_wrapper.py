@@ -75,6 +75,7 @@ class SocketWrapper:
         Add YouTube video to queue by video ID and wait until
         it's successfully added.
         """
+        logger.debug(f"Adding {id} to queue, and {wait=}.")
         self._socketio.emit(
             "queue",
             {"id": id, "type": "yt", "pos": "end", "temp": True},
