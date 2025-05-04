@@ -8,10 +8,10 @@ import requests
 from bs4 import BeautifulSoup as bs
 
 from cytubebot.common.commands import Commands
+from cytubebot.common.database_wrapper import DatabaseWrapper
 from cytubebot.common.exceptions import InvalidTagError
 from cytubebot.common.socket_wrapper import SocketWrapper
 from cytubebot.content_searchers.content_finder import ContentFinder
-from cytubebot.content_searchers.database import DBHandler
 from cytubebot.content_searchers.random_finder import RandomFinder
 
 VALID_TAGS: List = os.environ.get("VALID_TAGS", "").split()
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class ChatProcessor:
     def __init__(self) -> None:
         self._sio = SocketWrapper("", "")
-        self._db = DBHandler()
+        self._db = DatabaseWrapper("", 0)
         self._random_finder = RandomFinder()
         self._content_finder = ContentFinder()
 

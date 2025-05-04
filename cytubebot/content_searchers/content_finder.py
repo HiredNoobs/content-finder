@@ -5,14 +5,14 @@ from operator import itemgetter
 import requests
 from bs4 import BeautifulSoup as bs
 
-from cytubebot.content_searchers.database import DBHandler
+from cytubebot.common.database_wrapper import DatabaseWrapper
 
 logger = logging.getLogger(__name__)
 
 
 class ContentFinder:
     def __init__(self) -> None:
-        self._db = DBHandler()
+        self._db = DatabaseWrapper("", 0)
 
     def find_content(self, tag: str | None = None) -> list[dict]:
         """
