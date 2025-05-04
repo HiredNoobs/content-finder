@@ -30,7 +30,7 @@ def push(file):
 
 
 @cli.command()
-@click.argument("path", type=click.Path(exists=True))
+@click.argument("path", type=click.Path(exists=True), required=False)
 def pull(path):
     """Pull all keys from Redis and save them into a timestamped JSON file."""
     if path is None:
