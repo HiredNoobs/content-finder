@@ -15,8 +15,9 @@ class SIOData:
     _queue_resp: str | None = None
     _queue_err: bool = False
     _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 4))
-    _backoff_factor: int = 2
+    _backoff_factor: int = int(os.environ.get("RETRY_BACKOFF_FACTOR", 2))
     _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 16))
+    _retry_cooloff_period: int = int(os.environ.get("RETRY_COOLOFF_PERIOD", 10))
     _last_retry: datetime.datetime | None = None
     _lock: bool = False
     _current_media: dict | None = None
@@ -114,7 +115,7 @@ class SIOData:
             # If the latest retry was recent then we won't reset
             elapsed = (datetime.datetime.now() - self._last_retry).total_seconds()
             logger.debug(f"{elapsed} seconds since {self._last_retry=}")
-            if elapsed < 10:
+            if elapsed < self._retry_cooloff_period:
                 logger.debug(
                     f"Last retry was too soon ({elapsed} seconds ago), not resetting backoff."
                 )

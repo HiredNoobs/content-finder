@@ -162,10 +162,12 @@ class ChatBot:
                     self._sio.send_chat_msg(
                         f"Failed to add {video_id}, retrying in {delay} seconds."
                     )
+                    self._sio.data.last_retry = datetime.now()
                     self._sio.sleep(delay)
                     self._sio.data.increase_backoff()
+                else:
+                    self._sio.data.last_retry = datetime.now()
 
-                self._sio.data.last_retry = datetime.now()
                 self._sio.add_video_to_queue(video_id, wait=False)
             except KeyError:
                 logger.info("queue err response doesn't contain key 'id'")
