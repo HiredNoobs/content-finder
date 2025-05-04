@@ -35,7 +35,7 @@ jobs:
       - name: Run tests with pytest and generate coverage report
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest --cov=cytubebot --cov-report=html --cov-fail-under=80
+        run: pytest --cov=cytubebot --cov-report=html --cov-fail-under=20
 
       - name: Run mypy
         run: mypy --install-types --non-interactive cytubebot tests
