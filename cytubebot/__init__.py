@@ -12,7 +12,7 @@ else:
     logging_level = int(config_level)
 
 logging.basicConfig(
-    format="%(asctime)s, %(levelname)s [%(threadName)-8s] [%(filename)s:%(funcName)s:%(lineno)d] %(message)s",
+    format="%(asctime)s, %(levelname)s [%(threadName)-8s] [%(filename)s:%(funcName)s:L%(lineno)d] %(message)s",
     handlers=[logging.StreamHandler()],
 )
 logging.getLogger(__name__).setLevel(logging_level)
