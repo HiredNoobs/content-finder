@@ -122,8 +122,10 @@ class SIOData:
                 )
                 return
 
-        self._current_backoff = self._current_backoff - self._backoff_factor
-        self._last_retry = None
+        self._current_backoff = max(
+            self._current_backoff - self._backoff_factor,
+            int(os.environ.get("BASE_RETRY_BACKOFF", 4)),
+        )
         logger.debug(f"Backoff reduced to {self._current_backoff}")
 
     def increase_backoff(self) -> None:
