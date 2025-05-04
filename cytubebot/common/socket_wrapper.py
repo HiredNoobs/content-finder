@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import threading
@@ -69,10 +70,38 @@ class SocketWrapper:
         for msg in msgs:
             self._socketio.emit("chatMsg", {"msg": msg})
 
+    def add_video_to_queue(self, id: str, wait: bool = True) -> None:
+        """
+        Add YouTube video to queue by video ID and wait until
+        it's successfully added.
+        """
+        logger.debug(f"Adding {id} to queue, and {wait=}.")
+        self._socketio.emit(
+            "queue",
+            {"id": id, "type": "yt", "pos": "end", "temp": True},
+        )
+
+        if not wait:
+            return
+
+        logger.debug(
+            f"Starting to wait for content be successfully added. Starting values: {self.data.queue_resp=} and {self.data.queue_err=}."
+            f"Starting time: {datetime.datetime.now()}"
+        )
+
+        while self.data.queue_resp is None or self.data.queue_err:
+            self._socketio.sleep(0.3)
+
+        logger.debug(
+            f"Finished waiting for content to be added. Final values: {self.data.queue_resp=} and {self.data.queue_err=}."
+            f"Finish time: {datetime.datetime.now()}"
+        )
+
+        self.data.queue_resp = None
+
     def __getattr__(self, name):
         """
         Forward attribute access to the underlying SocketIO instance.
-        This allows you to call any of SocketIO's methods on the singleton.
         """
         try:
             return object.__getattribute__(self, name)

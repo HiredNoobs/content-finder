@@ -8,3 +8,7 @@ class MissingConfVar(Exception):
 
 class InvalidTagError(Exception):
     pass
+
+
+class InvalidBlackjackState(Exception):
+    pass

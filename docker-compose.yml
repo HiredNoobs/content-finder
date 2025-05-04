@@ -6,6 +6,8 @@ services:
       - 6379:6379
     volumes:
       - redis:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
     restart: on-failure
   content-finder:
     container_name: content-finder.bot
@@ -24,6 +26,9 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       LOG_LEVEL: DEBUG
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: on-failure
 
 volumes:

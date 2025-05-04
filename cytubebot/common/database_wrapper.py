@@ -1,7 +1,6 @@
-import atexit
 import json
 import logging
-import os
+import threading
 
 import requests
 from bs4 import BeautifulSoup as bs
@@ -11,12 +10,26 @@ import redis
 logger = logging.getLogger(__name__)
 
 
-class DBHandler:
-    def __init__(self) -> None:
-        host = os.getenv("REDIS_HOST", "localhost")
-        port = int(os.getenv("REDIS_PORT", 6379))
-        self._redis = redis.Redis(host=host, port=port, db=0, decode_responses=True)
-        atexit.register(self._close_connection)
+class DatabaseWrapper:
+    _instance = None
+    _lock = threading.Lock()
+
+    # Instance variable annotations for Mypy
+    _host: str
+    _port: int
+    _redis: redis.Redis
+
+    def __new__(cls, host: str, port: int):
+        if cls._instance is None:
+            with cls._lock:
+                instance = super().__new__(cls)
+                instance._host = host
+                instance._port = port
+                instance._redis = redis.Redis(
+                    host=host, port=port, db=0, decode_responses=True
+                )
+                cls._instance = instance
+        return cls._instance
 
     def _close_connection(self) -> None:
         logger.info("Closing Redis connection.")
@@ -143,7 +156,7 @@ class DBHandler:
         logger.info(f"Removed tags {tags_to_remove} from channel {channel_id}")
 
     def shutdown(self) -> None:
-        logger.debug("Shutting down DB remoted...")
+        logger.debug("Shutting down DB remotely...")
         self._redis.shutdown()
 
     @property

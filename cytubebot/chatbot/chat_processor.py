@@ -8,11 +8,11 @@ import requests
 from bs4 import BeautifulSoup as bs
 
 from cytubebot.common.commands import Commands
+from cytubebot.common.database_wrapper import DatabaseWrapper
 from cytubebot.common.exceptions import InvalidTagError
 from cytubebot.common.socket_wrapper import SocketWrapper
-from cytubebot.contentfinder.content_finder import ContentFinder
-from cytubebot.contentfinder.database import DBHandler
-from cytubebot.randomvideo.random_finder import RandomFinder
+from cytubebot.content_searchers.content_finder import ContentFinder
+from cytubebot.content_searchers.random_finder import RandomFinder
 
 VALID_TAGS: List = os.environ.get("VALID_TAGS", "").split()
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class ChatProcessor:
     def __init__(self) -> None:
         self._sio = SocketWrapper("", "")
-        self._db = DBHandler()
+        self._db = DatabaseWrapper("", 0)
         self._random_finder = RandomFinder()
         self._content_finder = ContentFinder()
 
@@ -72,17 +72,20 @@ class ChatProcessor:
     def _handle_current(self) -> None:
         try:
             self._sio.emit("playerReady")
+            self._sio.sleep(1)
             curr = self._sio.data.current_media
-            video_id = curr.get("id")
-            if not video_id:
+
+            if curr is None:
                 raise ValueError("No video id found in current media")
+
+            video_id = curr["id"]
             url = f"https://www.youtube.com/watch?v={video_id}"
             resp = requests.get(url, timeout=60)
             resp.raise_for_status()
 
             soup = bs(resp.text, "lxml")
             script = soup.find("script", string=re.compile("ytInitialPlayerResponse"))
-            if not script:
+            if script is None:
                 raise ValueError("ytInitialPlayerResponse not found in page source.")
 
             match_obj = re.search('.*"description":{"simpleText":"(.*?)"', script.text)
@@ -133,19 +136,14 @@ class ChatProcessor:
 
         self._sio.send_chat_msg(f"Adding {len(content)} videos.")
 
-        for content_tuple in content:
-            channel_id = content_tuple.channel_id
-            new_dt = content_tuple.datetime
-            video_id = content_tuple.video_id
+        for video in content:
+            logger.debug(f"Processing {video}")
 
-            self._sio.emit(
-                "queue",
-                {"id": video_id, "type": "yt", "pos": "end", "temp": True},
-            )
-            while self._sio.data.queue_resp is None or self._sio.data.queue_err:
-                self._sio.sleep(0.3)
-            self._sio.data.queue_resp = None
+            channel_id = video["channel_id"]
+            new_dt = video["datetime"]
+            video_id = video["video_id"]
 
+            self._sio.add_video_to_queue(video_id)
             self._db.update_datetime(channel_id, str(new_dt))
 
         self._sio.send_chat_msg("Finished adding content.")
@@ -156,12 +154,15 @@ class ChatProcessor:
             self._sio.send_chat_msg("It's not Christmas :(")
             return
 
-        xmas_vids = ["3KvWwJ6sh5s"]
+        xmas_vids = [
+            "3KvWwJ6sh5s",
+            "4JDjkUswzvQ",
+            "vmrMuwcpKkY",
+            "rYUMmIBWm",
+            "Wy1lK-MDZJU",
+        ]
         for video_id in xmas_vids:
-            self._sio.emit(
-                "queue",
-                {"id": video_id, "type": "yt", "pos": "end", "temp": True},
-            )
+            self._sio.add_video_to_queue(video_id)
 
     def _handle_random(self, command, args) -> None:
         rand_id = None
@@ -177,13 +178,7 @@ class ChatProcessor:
             rand_id, search_str = self._random_finder.find_random(size)
 
         if rand_id:
-            self._sio.emit(
-                "queue",
-                {"id": rand_id, "type": "yt", "pos": "end", "temp": True},
-            )
-            while not self._sio.data.queue_resp:
-                self._sio.sleep(0.3)
-            self._sio.data.queue_resp = None
+            self._sio.add_video_to_queue(rand_id)
             self._sio.send_chat_msg(f"Searched: {search_str}, added: {rand_id}")
         else:
             msg = "Found no random videos.. Try again. If giving arg over 5, try reducing."

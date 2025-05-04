@@ -14,9 +14,10 @@ class SIOData:
 
     _queue_resp: str | None = None
     _queue_err: bool = False
-    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
-    _backoff_factor: int = 2
-    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 15))
+    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 4))
+    _backoff_factor: int = int(os.environ.get("RETRY_BACKOFF_FACTOR", 2))
+    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 20))
+    _retry_cooloff_period: int = int(os.environ.get("RETRY_COOLOFF_PERIOD", 10))
     _last_retry: datetime.datetime | None = None
     _lock: bool = False
     _current_media: dict | None = None
@@ -91,6 +92,10 @@ class SIOData:
         """Return the timestamp of the last retry attempt."""
         return self._last_retry
 
+    @last_retry.setter
+    def last_retry(self, value: datetime.datetime) -> None:
+        self._last_retry = value
+
     def can_retry(self) -> bool:
         """
         Check if sufficient time has passed since the last retry based on the current backoff delay.
@@ -103,27 +108,32 @@ class SIOData:
 
     def reset_backoff(self) -> None:
         """
-        Reset the current backoff delay to its initial value and clear the last retry timestamp.
+        Reduce the current_backoff by the backoff_factor if the last_retry wasn't within
+        the retry_cooloff_period.
         """
         logger.debug("Attempting to reset backoff...")
         if self._last_retry is not None:
             # If the latest retry was recent then we won't reset
             elapsed = (datetime.datetime.now() - self._last_retry).total_seconds()
-            if elapsed < 10:
-                logger.debug("Last retry was too soon, not resetting backoff.")
+            logger.debug(f"{elapsed} seconds since {self._last_retry=}")
+            if elapsed < self._retry_cooloff_period:
+                logger.debug(
+                    f"Last retry was too soon ({elapsed} seconds ago), not resetting backoff."
+                )
                 return
-        self._current_backoff = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
-        self._last_retry = None
-        logger.debug(f"Backoff reset to {self._current_backoff}")
+
+        self._current_backoff = max(
+            self._current_backoff - self._backoff_factor,
+            int(os.environ.get("BASE_RETRY_BACKOFF", 4)),
+        )
+        logger.debug(f"Backoff reduced to {self._current_backoff}")
 
     def increase_backoff(self) -> None:
         """
-        Record a retry attempt by updating the last retry timestamp and increase the current backoff delay
-        exponentially, capping it at the maximum backoff value.
+        Increment the current_backoff.
         """
-        self._last_retry = datetime.datetime.now()
         self._current_backoff = min(
-            self._current_backoff * self._backoff_factor, self._max_backoff
+            self._current_backoff + self._backoff_factor, self._max_backoff
         )
         logger.debug(f"Current backoff increased to {self._current_backoff}")
 
