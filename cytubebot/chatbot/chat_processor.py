@@ -142,7 +142,7 @@ class ChatProcessor:
                 "queue",
                 {"id": video_id, "type": "yt", "pos": "end", "temp": True},
             )
-            while not self._sio.data.queue_resp:
+            while self._sio.data.queue_resp is None or self._sio.data.queue_err:
                 self._sio.sleep(0.3)
             self._sio.data.queue_resp = None
 

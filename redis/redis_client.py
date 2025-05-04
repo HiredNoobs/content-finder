@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 
 import click
 
@@ -29,8 +30,12 @@ def push(file):
 
 
 @cli.command()
-def pull():
+@click.argument("path", type=click.Path(exists=True), required=False)
+def pull(path):
     """Pull all keys from Redis and save them into a timestamped JSON file."""
+    if path is None:
+        path = os.getcwd()
+
     keys = redis_client.keys("*")
 
     channels = []
@@ -45,7 +50,7 @@ def pull():
     current_datetime = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = f"channels-{current_datetime}.json"
 
-    with open(output_file, "w") as f:
+    with open(f"{path}/{output_file}", "w") as f:
         json.dump(channels, f, indent=4)
 
 

@@ -1,14 +1,14 @@
 services:
   redis:
-    container_name: content-finder-redis-1
+    container_name: content-finder.redis
     image: redis:7.4.2
     ports:
       - 6379:6379
     volumes:
       - redis:/data
-    restart: unless-stopped
+    restart: on-failure
   content-finder:
-    container_name: content-finder
+    container_name: content-finder.bot
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,7 +24,7 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       LOG_LEVEL: DEBUG
-    restart: unless-stopped
+    restart: on-failure
 
 volumes:
   redis:
