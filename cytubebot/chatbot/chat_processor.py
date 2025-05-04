@@ -72,6 +72,7 @@ class ChatProcessor:
     def _handle_current(self) -> None:
         try:
             self._sio.emit("playerReady")
+            self._sio.sleep(1)
             curr = self._sio.data.current_media
             video_id = curr.get("id")
             if not video_id:
@@ -133,10 +134,10 @@ class ChatProcessor:
 
         self._sio.send_chat_msg(f"Adding {len(content)} videos.")
 
-        for content_tuple in content:
-            channel_id = content_tuple.channel_id
-            new_dt = content_tuple.datetime
-            video_id = content_tuple.video_id
+        for video in content:
+            channel_id = video["channel_id"]
+            new_dt = video["datetime"]
+            video_id = video["video_id"]
 
             self._sio.add_video_to_queue(video_id)
             self._db.update_datetime(channel_id, str(new_dt))

@@ -1,7 +1,6 @@
 import logging
-from collections import namedtuple
 from datetime import datetime
-from operator import attrgetter
+from operator import itemgetter
 
 import requests
 from bs4 import BeautifulSoup as bs
@@ -15,17 +14,19 @@ class ContentFinder:
     def __init__(self) -> None:
         self._db = DBHandler()
 
-    def find_content(self, tag: str | None = None) -> list[namedtuple]:
+    def find_content(self, tag: str | None = None) -> list[dict]:
         """
         returns:
-            A list containing a named tuple of new content found.
-            Content tuple comes in the form:
-            {
-                'channel_id': (datetime, [video_id_1, video_id_2])
-            }
+            A list of dicts, each video comes in a dict.
+            Comes in the form:
+            [
+                {
+                    "channel_id": "abc123",
+                    "datetime": datetime.datetime(2025, 1, 1, 0, 5, 23),
+                    "video_id": "afghtbx36"
+                }
+            ]
         """
-        ContentDetails = namedtuple("ContentDetails", "channel_id datetime video_id")
-
         content = []
         channels = self._db.get_channels(tag)
 
@@ -55,10 +56,14 @@ class ContentFinder:
                 video_id = item.find_all("yt:videoid")[0].text
 
                 if not self._is_short(title, video_id):
-                    c = ContentDetails(channel_id, published, video_id)
+                    c = {
+                        "channel_id": channel_id,
+                        "datetime": published,
+                        "video_id": video_id,
+                    }
                     content.append(c)
 
-        content = sorted(content, key=attrgetter("datetime"))
+        content = sorted(content, key=itemgetter("datetime"))
 
         return content
 
