@@ -14,9 +14,9 @@ class SIOData:
 
     _queue_resp: str | None = None
     _queue_err: bool = False
-    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 2))
+    _current_backoff: int = int(os.environ.get("BASE_RETRY_BACKOFF", 4))
     _backoff_factor: int = 2
-    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 15))
+    _max_backoff: int = int(os.environ.get("MAX_RETRY_BACKOFF", 16))
     _last_retry: datetime.datetime | None = None
     _lock: bool = False
     _current_media: dict | None = None
@@ -91,6 +91,10 @@ class SIOData:
         """Return the timestamp of the last retry attempt."""
         return self._last_retry
 
+    @last_retry.setter
+    def last_retry(self, value: datetime.datetime) -> None:
+        self._last_retry = value
+
     def can_retry(self) -> bool:
         """
         Check if sufficient time has passed since the last retry based on the current backoff delay.
@@ -121,12 +125,10 @@ class SIOData:
 
     def increase_backoff(self) -> None:
         """
-        Record a retry attempt by updating the last retry timestamp and increase the current backoff delay
-        exponentially, capping it at the maximum backoff value.
+        Increment the current_backoff.
         """
-        self._last_retry = datetime.datetime.now()
         self._current_backoff = min(
-            self._current_backoff * self._backoff_factor, self._max_backoff
+            self._current_backoff + self._backoff_factor, self._max_backoff
         )
         logger.debug(f"Current backoff increased to {self._current_backoff}")
 
