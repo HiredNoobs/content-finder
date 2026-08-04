@@ -9,7 +9,7 @@ from aio_pika import IncomingMessage
 from contentbot.chatbot.async_socket import AsyncSocket
 from contentbot.chatbot.db.async_redis_db import AsyncRedisDB
 from contentbot.chatbot.processors.base_processor import BaseProcessor
-from contentbot.chatbot.utils.yt import get_channel_id_from_name, get_data_from_pattern
+from contentbot.chatbot.utils.yt import get_channel_id_from_name
 from contentbot.common.queue.rabbitmq_producer import AsyncRabbitMQProducer
 from contentbot.exceptions import QueueError
 
@@ -346,7 +346,18 @@ class AsyncContentProcessor(BaseProcessor):
             last_pull = self._sio.data.get_last_content_pull(tag)
             if last_pull:
                 if last_pull > now - timedelta(minutes=5):
+                    if tag:
+                        await self._sio.send_chat_msg(
+                            f"'{tag}' content was pulled recently. Please wait before pulling again."
+                        )
+                    else:
+                        await self._sio.send_chat_msg("Content was pulled recently. Please wait before pulling again.")
                     continue
+
+            if tag:
+                await self._sio.send_chat_msg(f"Pulling content for '{tag}'...")
+            else:
+                await self._sio.send_chat_msg("Pulling content...")
 
             channels = await self._db.get_channels(tag=tag)
             for channel in channels:
